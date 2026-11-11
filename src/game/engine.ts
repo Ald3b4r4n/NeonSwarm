@@ -38,6 +38,8 @@ const PULSE_PUSH = 96;
 const SHOT_SPEED = 570;
 const SHOT_RADIUS = 5;
 const SHOT_TTL = 1.9;
+/** Distância além dos bounds em que projéteis ainda são atualizados e podem acertar. */
+const PROJECTILE_MARGIN = 48;
 
 const WAVE_INTERMISSION_SECONDS = 3;
 const SIM_STEP = 1 / 60;
@@ -53,6 +55,21 @@ const ORB_MAX_SPEED = 540;
 const ORB_PICKUP_PADDING = 4;
 
 const UPGRADE_MAX_LEVEL = 8;
+
+// Caps reais dos stats. Um upgrade não deve aparecer quando seu incremento
+// já seria absorvido pelo cap e, portanto, não alteraria o efeito.
+const FIRE_RATE_CAP = 12;
+const MOVE_SPEED_CAP = 360;
+const MULTISHOT_CAP = 8;
+const MAGNET_CAP = 520;
+const PIERCE_CAP = 6;
+const REGEN_CAP = 5;
+
+// Níveis em que o stat correspondente chega ao cap antes de UPGRADE_MAX_LEVEL.
+const UPGRADE_EFFECT_MAX_LEVEL: Partial<Record<UpgradeId, number>> = {
+  multishot: 7, // 1 projétil inicial + 7 incrementos = cap 8
+  pierce: 6, // 0 perfurações iniciais + 6 incrementos = cap 6
+};
 
 interface EnemyTemplate {
   radius: number;
@@ -366,12 +383,38 @@ function hurtPlayer(state: GameState, amount: number): void {
   }
 }
 
+/** True somente se comprar o próximo nível ainda altera algum efeito do jogador. */
+function upgradeCanImprove(state: GameState, id: UpgradeId): boolean {
+  const player = state.player;
+  const level = player.upgrades[id] ?? 0;
+  if (level >= UPGRADE_MAX_LEVEL) return false;
+
+  const effectMaxLevel = UPGRADE_EFFECT_MAX_LEVEL[id];
+  if (effectMaxLevel !== undefined && level >= effectMaxLevel) return false;
+
+  switch (id) {
+    case 'fireRate':
+      return player.stats.fireRate < FIRE_RATE_CAP;
+    case 'speed':
+      return player.stats.moveSpeed < MOVE_SPEED_CAP;
+    case 'multishot':
+      return player.stats.projectiles < MULTISHOT_CAP;
+    case 'magnet':
+      return player.stats.magnetRadius < MAGNET_CAP;
+    case 'pierce':
+      return player.stats.pierce < PIERCE_CAP;
+    case 'regen':
+      return player.stats.regenPerSec < REGEN_CAP;
+    default:
+      // damage e maxHp não têm cap: sempre incrementam.
+      return true;
+  }
+}
+
 function buildUpgradeOptions(state: GameState): UpgradeOption[] {
-  const available = UPGRADE_IDS.filter(
-    (id) => (state.player.upgrades[id] ?? 0) < UPGRADE_MAX_LEVEL,
-  );
-  // Nunca deixa o jogador sem escolha, mesmo em partidas muito longas.
-  const pool = available.length > 0 ? available : [...UPGRADE_IDS];
+  // Não usa fallback para upgrades esgotados: uma escolha sem efeito apenas
+  // consome o nível e trava a progressão real do jogador.
+  const pool = UPGRADE_IDS.filter((id) => upgradeCanImprove(state, id));
 
   // Sorteio sem repetição, preservando determinismo.
   for (let i = pool.length - 1; i > 0; i -= 1) {
@@ -614,12 +657,28 @@ function updateEnemies(state: GameState, dt: number): void {
 
     enemy.pos.x += enemy.vel.x * dt;
     enemy.pos.y += enemy.vel.y * dt;
+
+    if (enemy.kind === 'shooter') {
+      // Shooters nascem fora da arena, mas não podem recuar além da faixa em
+      // que os projéteis do jogador ainda são atualizados. Sem este limite, um
+      // shooter na borda fica inalcançável e a onda nunca termina.
+      enemy.pos.x = clamp(
+        enemy.pos.x,
+        state.bounds.x - PROJECTILE_MARGIN,
+        state.bounds.x + state.bounds.w + PROJECTILE_MARGIN,
+      );
+      enemy.pos.y = clamp(
+        enemy.pos.y,
+        state.bounds.y - PROJECTILE_MARGIN,
+        state.bounds.y + state.bounds.h + PROJECTILE_MARGIN,
+      );
+    }
   }
 }
 
 function updateProjectiles(state: GameState, dt: number): void {
   const player = state.player;
-  const margin = 48;
+  const margin = PROJECTILE_MARGIN;
 
   for (const projectile of state.projectiles) {
     if (projectile.ttl <= 0) continue;
@@ -874,26 +933,26 @@ export function applyUpgrade(state: GameState, id: UpgradeId): GameState {
       player.stats.damage += 5;
       break;
     case 'fireRate':
-      player.stats.fireRate = Math.min(12, player.stats.fireRate + 0.35);
+      player.stats.fireRate = Math.min(FIRE_RATE_CAP, player.stats.fireRate + 0.35);
       break;
     case 'speed':
-      player.stats.moveSpeed = Math.min(360, player.stats.moveSpeed + 18);
+      player.stats.moveSpeed = Math.min(MOVE_SPEED_CAP, player.stats.moveSpeed + 18);
       break;
     case 'maxHp':
       player.maxHp += 20;
       player.hp = Math.min(player.maxHp, player.hp + 20);
       break;
     case 'multishot':
-      player.stats.projectiles = Math.min(8, player.stats.projectiles + 1);
+      player.stats.projectiles = Math.min(MULTISHOT_CAP, player.stats.projectiles + 1);
       break;
     case 'magnet':
-      player.stats.magnetRadius = Math.min(520, player.stats.magnetRadius + 40);
+      player.stats.magnetRadius = Math.min(MAGNET_CAP, player.stats.magnetRadius + 40);
       break;
     case 'pierce':
-      player.stats.pierce = Math.min(6, player.stats.pierce + 1);
+      player.stats.pierce = Math.min(PIERCE_CAP, player.stats.pierce + 1);
       break;
     case 'regen':
-      player.stats.regenPerSec = Math.min(5, player.stats.regenPerSec + 0.6);
+      player.stats.regenPerSec = Math.min(REGEN_CAP, player.stats.regenPerSec + 0.6);
       break;
   }
 

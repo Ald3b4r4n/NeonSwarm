@@ -44,6 +44,31 @@ function addEnemy(
   };
 }
 
+/** Compara os stats antes/depois de aplicar um upgrade efetivamente oferecido. */
+function upgradeChangesEffect(state: GameState, id: UpgradeId): boolean {
+  const before = state.player;
+  const after = applyUpgrade(state, id).player;
+
+  switch (id) {
+    case 'damage':
+      return after.stats.damage > before.stats.damage;
+    case 'fireRate':
+      return after.stats.fireRate > before.stats.fireRate;
+    case 'speed':
+      return after.stats.moveSpeed > before.stats.moveSpeed;
+    case 'maxHp':
+      return after.maxHp > before.maxHp;
+    case 'multishot':
+      return after.stats.projectiles > before.stats.projectiles;
+    case 'magnet':
+      return after.stats.magnetRadius > before.stats.magnetRadius;
+    case 'pierce':
+      return after.stats.pierce > before.stats.pierce;
+    case 'regen':
+      return after.stats.regenPerSec > before.stats.regenPerSec;
+  }
+}
+
 /** Estado sem spawns de onda e sem tiros automáticos, para isolar um teste. */
 function quiet(state: GameState): GameState {
   return {
@@ -403,6 +428,68 @@ describe('ondas', () => {
     expect(waveTwo.enemies[0]?.kind).toBe('brute');
   });
 
+  it('shooter nascido fora da borda não recua além da margem alcançável', () => {
+    let state = quiet(createGame(77));
+    state = {
+      ...state,
+      player: {
+        ...state.player,
+        pos: { x: ARENA_BOUNDS.x + 40, y: ARENA_HEIGHT / 2 },
+        fireCooldown: 999,
+      },
+    };
+    state = addEnemy(state, 'shooter', ARENA_BOUNDS.x - 37, ARENA_HEIGHT / 2, {
+      hp: 9999,
+      maxHp: 9999,
+      fireCooldown: 999,
+    });
+
+    for (let i = 0; i < 600; i += 1) {
+      state = stepGame(state, IDLE, 1 / 60);
+    }
+
+    const shooter = state.enemies.find((enemy) => enemy.kind === 'shooter');
+    expect(shooter).toBeDefined();
+    // 48 é a margem em que projéteis ainda são atualizados e podem colidir.
+    expect(shooter?.pos.x).toBeGreaterThanOrEqual(ARENA_BOUNDS.x - 48 - 1e-9);
+    expect(shooter?.pos.x).toBeLessThanOrEqual(
+      ARENA_BOUNDS.x + ARENA_WIDTH + 48 + 1e-9,
+    );
+  });
+
+  it('shooter fora dos limites permanece alcançável e permite concluir a onda', () => {
+    let state = createGame(78);
+    state = {
+      ...state,
+      player: {
+        ...state.player,
+        pos: { x: ARENA_BOUNDS.x + 80, y: ARENA_HEIGHT / 2 },
+        fireCooldown: 0,
+      },
+      wave: { ...state.wave, toSpawn: 0, spawnTimer: 0, intermission: 0 },
+    };
+    // Começa além da margem: o clamp deve trazê-lo para a faixa alcançável.
+    state = addEnemy(state, 'shooter', ARENA_BOUNDS.x - 90, ARENA_HEIGHT / 2, {
+      hp: 24,
+      maxHp: 24,
+      fireCooldown: 999,
+    });
+
+    let steps = 0;
+    while (state.enemies.length > 0 && steps < 1200) {
+      state = stepGame(state, IDLE, 1 / 60);
+      steps += 1;
+    }
+
+    expect(steps).toBeLessThan(1200);
+    expect(state.enemies).toHaveLength(0);
+    expect(state.stats.killsByKind.shooter).toBe(1);
+    expect(state.stats.damageDealt).toBeGreaterThanOrEqual(24);
+
+    const completing = stepGame(state, IDLE, 1 / 60);
+    expect(completing.wave.intermission).toBeGreaterThan(0);
+  });
+
   it('os três tipos aparecem até a onda 3', () => {
     const waveThree: GameState = {
       ...createGame(43),
@@ -470,8 +557,7 @@ describe('upgrades', () => {
     expect(state.phase).toBe('upgrade');
     expect(state.player.level).toBe(2);
     expect(state.player.xp).toBe(0);
-    expect(state.upgradeOptions.length).toBeGreaterThanOrEqual(1);
-    expect(state.upgradeOptions.length).toBeLessThanOrEqual(3);
+    expect(state.upgradeOptions).toHaveLength(3);
 
     const ids = state.upgradeOptions.map((option) => option.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -484,6 +570,69 @@ describe('upgrades', () => {
 
     // Em upgrade o motor não avança mais.
     expect(stepGame(state, IDLE, 1)).toBe(state);
+  });
+
+  it('não oferece pierce nem multishot quando seus efeitos já estão no cap', () => {
+    let state = createGame(31);
+    state = {
+      ...state,
+      player: {
+        ...state.player,
+        xp: state.player.xpToNext,
+        stats: { ...state.player.stats, pierce: 6, projectiles: 8 },
+        upgrades: { pierce: 6, multishot: 7 },
+      },
+    };
+
+    state = stepGame(state, IDLE, 1 / 60);
+
+    expect(state.phase).toBe('upgrade');
+    const ids = state.upgradeOptions.map((option) => option.id);
+    expect(ids).not.toContain('pierce');
+    expect(ids).not.toContain('multishot');
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(3);
+    for (const id of ids) {
+      expect(upgradeChangesEffect(state, id)).toBe(true);
+    }
+  });
+
+  it('preenche três opções úteis quando restam exatamente três upgrades', () => {
+    let state = createGame(32);
+    state = {
+      ...state,
+      player: {
+        ...state.player,
+        xp: state.player.xpToNext,
+        stats: {
+          ...state.player.stats,
+          pierce: 6,
+          projectiles: 8,
+          fireRate: 12,
+          moveSpeed: 336,
+          magnetRadius: 520,
+          regenPerSec: 5,
+        },
+        upgrades: {
+          pierce: 6,
+          multishot: 7,
+          fireRate: 8,
+          speed: 7,
+          magnet: 8,
+          regen: 8,
+        },
+      },
+    };
+
+    state = stepGame(state, IDLE, 1 / 60);
+
+    // Só damage, maxHp e speed ainda têm efeito; preenche exatamente três.
+    expect(state.phase).toBe('upgrade');
+    expect(state.upgradeOptions).toHaveLength(3);
+    expect(new Set(state.upgradeOptions.map((option) => option.id)).size).toBe(3);
+    for (const option of state.upgradeOptions) {
+      expect(upgradeChangesEffect(state, option.id)).toBe(true);
+    }
   });
 
   it('aplica cada upgrade e volta ao jogo', () => {

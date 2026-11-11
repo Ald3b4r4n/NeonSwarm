@@ -1,0 +1,10 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+.hivemind/
+.vercel/
+.env*
+*.log
+.agents/
+.mcp.json

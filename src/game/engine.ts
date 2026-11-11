@@ -282,7 +282,6 @@ function spawnEnemy(state: GameState, indexInWave: number): void {
   const scale = enemyScale(waveNumber);
   const pos = chooseSpawnPoint(state, template.radius);
   const maxHp = Math.round(template.hp * scale);
-  const speed = template.speed * Math.min(1.55, 1 + (waveNumber - 1) * 0.035);
 
   const enemy: Enemy = {
     id: state.nextId++,

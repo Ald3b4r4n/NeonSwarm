@@ -635,6 +635,28 @@ describe('upgrades', () => {
     }
   });
 
+  it('mantém a partida ativa depois de esgotar todos os upgrades', () => {
+    const state = createGame(33);
+    state.player.xp = state.player.xpToNext;
+    state.player.upgrades = {
+      damage: 8,
+      fireRate: 8,
+      speed: 8,
+      maxHp: 8,
+      multishot: 7,
+      magnet: 8,
+      pierce: 6,
+      regen: 8,
+    };
+
+    const next = stepGame(state, IDLE, 1 / 60);
+
+    expect(next.player.level).toBe(2);
+    expect(next.phase).toBe('playing');
+    expect(next.upgradeOptions).toHaveLength(0);
+    expect(stepGame(next, IDLE, 1 / 60).stats.timeAlive).toBeGreaterThan(next.stats.timeAlive);
+  });
+
   it('aplica cada upgrade e volta ao jogo', () => {
     const ids: UpgradeId[] = [
       'damage',

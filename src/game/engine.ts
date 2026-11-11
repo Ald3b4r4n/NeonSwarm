@@ -440,8 +440,8 @@ function maybeLevelUp(state: GameState): void {
   player.xp -= player.xpToNext;
   player.level += 1;
   player.xpToNext = xpThreshold(player.level);
-  state.phase = 'upgrade';
   state.upgradeOptions = buildUpgradeOptions(state);
+  state.phase = state.upgradeOptions.length > 0 ? 'upgrade' : 'playing';
   addImpact(state, 'levelUp', player.pos);
 }
 

@@ -4,6 +4,8 @@ Um arena survivor 2D em uma arena cyberpunk. A nave dispara automaticamente no i
 
 ## Jogar
 
+[Abrir NEON SWARM no GitHub Pages](https://ald3b4r4n.github.io/NeonSwarm/)
+
 - **Computador** — WASD ou setas para mover. Espaço ativa o pulso. Esc ou P pausa.
 - **Celular** — arraste sobre a arena para mover. Use os botões na tela para pulso, pausa e upgrades.
 - **Evolução** — escolha um upgrade ao subir de nível. O recorde fica no armazenamento local do navegador.
@@ -34,4 +36,4 @@ Os testes E2E servem o build de produção. O jogo funciona no navegador, com gr
 
 ## Créditos
 
-Projeto desenvolvido como desafio operacional do Hivemind. Codex CLI coordenou pelo MCP. Claude Code definiu os contratos, OpenCode Go trabalhou no motor e Codex CLI trabalhou na interface como fallback do Muse Code. Os resultados de cada executor e a situação da publicação estão no relatório P004.
+Projeto desenvolvido como desafio operacional do Hivemind. Codex CLI coordenou pelo MCP. Claude Code definiu os contratos, OpenCode Go trabalhou no motor e Codex CLI trabalhou na interface como fallback do Muse Code. Os resultados de cada executor e a situação da publicação estão no [relatório P004](docs/p004.md).

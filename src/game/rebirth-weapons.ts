@@ -96,7 +96,7 @@ export const WEAPONS: Readonly<Record<WeaponId, WeaponDefinition>> = {
         damage: 10 + 4 * (level - 1),
         cooldown: 0.5 - 0.04 * (level - 1),
         range: 520 + 30 * (level - 1),
-        projectileSpeed: 620,
+        projectileSpeed: 620 + (level - 1) * 26,
         projectiles: 1,
         pierce: 0,
       };

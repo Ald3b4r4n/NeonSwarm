@@ -188,6 +188,8 @@ export class ReforgedScene {
 
   static async create(canvas: HTMLCanvasElement): Promise<ReforgedScene> {
     const engine = new Engine(canvas, true, { antialias: true, preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: false, powerPreference: 'high-performance' });
+    // The lit station shaders exceed the vertex uniform block limit on some WebGL2 drivers.
+    engine.disableUniformBuffers = true;
     const scene = new Scene(engine);
     scene.clearColor = new Color4(0.018, 0.033, 0.052, 1);
     scene.ambientColor = new Color3(0.18, 0.22, 0.28);
@@ -219,7 +221,6 @@ export class ReforgedScene {
     shadow.normalBias = 0.03;
     shadow.setDarkness(0.4);
 
-    ReforgedScene.buildIndustrialStage(scene, shadow);
     const assetBase = new URL('./reforged/', document.baseURI).href;
     let vesper: AssetContainer;
     let drone: AssetContainer;
@@ -237,7 +238,9 @@ export class ReforgedScene {
       if (message.includes('vesper.glb') || message.includes('drone.glb')) throw error;
       throw new Error(`Falha ao carregar /reforged/vesper.glb e /reforged/drone.glb: ${message}`);
     }
-    return new ReforgedScene(canvas, engine, scene, camera, shadow, vesper, drone);
+    const renderer = new ReforgedScene(canvas, engine, scene, camera, shadow, vesper, drone);
+    ReforgedScene.buildIndustrialStage(scene, shadow);
+    return renderer;
   }
 
   private static buildIndustrialStage(scene: Scene, shadow: ShadowGenerator): void {

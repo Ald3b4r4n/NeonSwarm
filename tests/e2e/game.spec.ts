@@ -50,8 +50,14 @@ test('touch move o jogador numa viewport de 320 px', async ({ browser }) => {
     const errors = collectErrors(page);
     await page.clock.install();
     await page.goto('./');
+    await page.getByRole('button', { name: /rook/i }).tap();
+    await page.getByRole('button', { name: /viveiro rubro/i }).tap();
+    await expect(page.getByRole('button', { name: /rook/i })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: /viveiro rubro/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.getByRole('button', { name: /^jogar$/i }).tap();
     const arena = page.getByTestId('arena');
+    await expect(arena).toBeVisible();
     const box = await arena.boundingBox();
     if (!box) throw new Error('Arena móvel não visível.');
     const initial = await playerX(page);
@@ -71,11 +77,12 @@ test('touch move o jogador numa viewport de 320 px', async ({ browser }) => {
 });
 
 test('a partida progride, oferece upgrades, causa dano e salva o recorde após a derrota', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const errors = collectErrors(page);
   await page.clock.install({ time: new Date('2026-11-11T00:00:00Z') });
   await page.goto('./');
   await page.getByRole('button', { name: /^jogar$/i }).click();
+  await expect(page.getByTestId('arena')).toBeVisible();
   const startHealth = Number((await page.getByTestId('health').innerText()).split('/')[0]);
   const restart = page.getByRole('button', { name: /jogar novamente/i });
   const upgrades = page.locator('.upgrades button');
@@ -84,7 +91,7 @@ test('a partida progride, oferece upgrades, causa dano e salva o recorde após a
   let sawUpgrade = false;
   let wave = 1;
 
-  for (let turn = 0; turn < 120 && !(await restart.isVisible()); turn++) {
+  for (let turn = 0; turn < 325 && !(await restart.isVisible()); turn++) {
     const direction = turn < 46 ? directions[Math.floor(turn / 2) % directions.length] : undefined;
     if (direction) await page.keyboard.down(direction);
     await page.clock.runFor(1250);
@@ -110,4 +117,15 @@ test('a partida progride, oferece upgrades, causa dano e salva o recorde após a
   await page.reload();
   await expect(page.getByTestId('record')).not.toHaveText('0');
   expect(errors).toEqual([]);
+});
+
+test('a seleção informa falha de asset e permite tentar novamente', async ({ page }) => {
+  await page.goto('./');
+  await page.route('**/art/queen.webp', route => route.abort(), { times: 1 });
+  await page.getByRole('button', { name: /^jogar$/i }).click();
+  await expect(page.getByRole('alert')).toContainText('Falha ao carregar a arena');
+  await expect(page.getByTestId('arena')).toBeHidden();
+  await page.getByRole('button', { name: /^jogar$/i }).click();
+  await expect(page.getByTestId('arena')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });

@@ -154,7 +154,7 @@ export function App() {
     <header className="masthead"><a className="brand" href="#arena">NEON<span>SWARM</span></a><span className="edition">REBIRTH</span></header>
     <section className="dashboard" aria-label="Painel da partida">
       <div className="vitals"><span>VIDA <strong data-testid="health">{Math.ceil(p.hp)} / {p.maxHp}</strong></span><meter aria-label="Vida" min={0} max={p.maxHp} value={p.hp} /><span>ENERGIA <strong>{Math.floor(p.energy)} / {p.maxEnergy}</strong></span><meter className="energy" aria-label="Energia" min={0} max={p.maxEnergy} value={p.energy} /></div>
-      <div className="metric"><span>NÍVEL</span><strong data-testid="level">{p.level.toString().padStart(2, '0')}</strong></div>
+      <div className="metric"><span>NÍVEL</span><strong data-testid="level">{p.level.toString().padStart(2, '0')}</strong><meter aria-label="Experiência até o próximo nível" max={p.xpToNext} value={Math.min(p.xp, p.xpToNext)} /></div>
       <div className="metric"><span>ONDA</span><strong data-testid="wave">{snapshot.wave.number.toString().padStart(2, '0')}</strong></div>
       <div className="metric"><span>TEMPO</span><strong data-testid="time">{clock(snapshot.stats.timeAlive)}</strong></div>
       <div className="metric"><span>INIMIGOS</span><strong>{snapshot.enemies.length}</strong></div>

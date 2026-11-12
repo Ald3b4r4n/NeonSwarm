@@ -456,6 +456,7 @@ function maybeLevelUp(state: GameState): void {
 
   player.xp -= player.xpToNext;
   player.level += 1;
+  if (state.run) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * .14);
   player.xpToNext = state.run ? 22 + (player.level - 1) * 13 + Math.floor(player.level ** 2 * .28) : xpThreshold(player.level);
   state.upgradeOptions = buildUpgradeOptions(state);
   state.phase = state.upgradeOptions.length > 0 ? 'upgrade' : 'playing';
@@ -496,7 +497,8 @@ function fireEnemyProjectile(state: GameState, enemy: Enemy): void {
 
   const player = state.player;
   const dir = normalize(player.pos.x - enemy.pos.x, player.pos.y - enemy.pos.y);
-  const speed = 195 + Math.min(60, state.wave.number * 5);
+  const spore = enemy.variant === 'spore';
+  const speed = spore ? 125 : 195 + Math.min(60, state.wave.number * 5);
 
   state.projectiles.push({
     id: state.nextId++,
@@ -504,7 +506,7 @@ function fireEnemyProjectile(state: GameState, enemy: Enemy): void {
     pos: { x: enemy.pos.x + dir.x * (enemy.radius + 3), y: enemy.pos.y + dir.y * (enemy.radius + 3) },
     vel: { x: dir.x * speed, y: dir.y * speed },
     radius: 6,
-    damage: 9 + state.wave.number,
+    damage: spore ? 4 + Math.floor(state.wave.number / 2) : 9 + state.wave.number,
     pierceLeft: 0,
     ttl: 4,
     hitIds: [],
@@ -810,6 +812,7 @@ function initializeRebirth(state: GameState, config: RunConfig): void {
   state.player.hp = character.maxHp;
   state.player.stats.moveSpeed = character.moveSpeed;
   state.player.stats.magnetRadius = 220;
+  state.player.stats.regenPerSec = .22;
   state.player.xpToNext = 22;
   state.wave.toSpawn = 0;
   state.run = {
@@ -875,7 +878,8 @@ function updateEncounter(state: GameState, dt: number): void {
   if (state.wave.spawnTimer > 0 || state.enemies.length >= MAX_ENEMIES) return;
   const encounter = encounterAt(state.time, run.spawnIndex++, run.biome);
   const variant = encounter.kind === 'queen' ? 'elite'
-    : encounter.kind === 'spore' && state.time < 90 && run.spawnIndex % 6 !== 0 ? 'drone' : encounter.kind;
+    : encounter.kind === 'spore' && state.time < 90 && run.spawnIndex % 6 !== 0 ? 'drone'
+    : encounter.kind === 'shooter' && state.time < 300 && run.spawnIndex % 4 !== 0 ? 'drone' : encounter.kind;
   spawnRebirthEnemy(state, variant, encounter.scale);
   if (state.time > 275 && !run.bossSpawned) {
     spawnRebirthEnemy(state, run.spawnIndex % 3 ? 'drone' : 'hound', encounter.scale);

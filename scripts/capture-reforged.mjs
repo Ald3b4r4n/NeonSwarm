@@ -13,6 +13,11 @@ try {
   const errors = [];
   const fetched = new Set();
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error' && message.text().includes('Unable to compile effect')) {
+      errors.push(message.text());
+    }
+  });
   page.on('response', response => {
     if (response.ok() && /\.glb(?:\?|$)/.test(response.url())) fetched.add(new URL(response.url()).pathname.split('/').pop());
   });
@@ -23,7 +28,9 @@ try {
   const arena = page.getByTestId('arena');
   await expect(arena).toBeVisible({ timeout: 30000 });
   await expect.poll(() => [...fetched].sort()).toEqual(['drone.glb', 'vesper.glb']);
+  await expect(arena).toHaveAttribute('data-renderer', 'babylon-webgl');
   await page.waitForTimeout(1500);
+  expect(errors).toEqual([]);
   await shot('babylon-landscape-915x412');
   await arena.evaluate(canvas => {
     const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: 'video/webm' });
@@ -33,6 +40,9 @@ try {
       recorder.onstop = async () => resolve([...new Uint8Array(await new Blob(chunks).arrayBuffer())]);
       recorder.stop();
     });
+    window.reforgedClips = new Set();
+    new MutationObserver(() => window.reforgedClips.add(canvas.dataset.playerClip))
+      .observe(canvas, { attributes:true, attributeFilter:['data-player-clip'] });
     recorder.start();
   });
   for (const key of ['ArrowRight','ArrowUp','ArrowLeft']) {
@@ -52,6 +62,16 @@ try {
     await button('Fechar painel', panel).first().tap();
     await button('Retomar').last().tap();
   };
+  await open();
+  const initialHp = Number((await page.getByTestId('health').textContent()).split('/')[0]);
+  for (let i = 0; i < 12; i++) await button('Drone', panel).tap();
+  await resume();
+  await expect.poll(async () => {
+    const upgrade = page.locator('.upgrades button').first();
+    if (await upgrade.isVisible()) await upgrade.tap();
+    return Number((await page.getByTestId('health').textContent()).split('/')[0]);
+  }, { timeout: 20000 }).toBeLessThan(initialHp);
+  await expect.poll(() => page.evaluate(() => [...window.reforgedClips])).toContain('hurt');
   for (let rank=1; rank<=5; rank++) {
     if (await page.getByRole('heading', { name: 'Escolha sua evolução' }).isVisible()) await page.locator('.upgrades button').first().tap();
     await open();
@@ -61,13 +81,16 @@ try {
     await button(String(rank), levels).tap();
     for (let i=0; i<4; i++) await button('Drone', panel).tap();
     await resume();
-    await page.waitForTimeout(920);
+    await page.waitForTimeout(700);
+    const upgrade = page.locator('.upgrades button').first();
+    if (await upgrade.isVisible()) await upgrade.tap();
     await shot('bobina-' + rank);
   }
   writeFileSync(out + '/babylon-bobina.webm', Buffer.from(await page.evaluate(() => window.reforgedCapture())));
   if (await page.getByRole('heading', { name: 'Escolha sua evolução' }).isVisible()) await page.locator('.upgrades button').first().tap();
   await open();
   await panel.getByRole('checkbox', { name: /congelar inimigos/i }).check();
+  await button('Remover arma', panel).tap();
   for (let i=0; i<52; i++) await button('Drone', panel).tap();
   const count = await panel.getByText(/^INIMIGOS \d+$/).textContent();
   if (Number(count.match(/\d+/)?.[0]) < 50) throw new Error('Menos de 50 inimigos');
@@ -85,7 +108,7 @@ try {
     requestAnimationFrame(tick);
   }));
   expect(errors).toEqual([]);
-  console.log(JSON.stringify({fetched:[...fetched],count,measured}));
+  console.log(JSON.stringify({fetched:[...fetched],count,measured,hurt:true,clips:await page.evaluate(()=>[...window.reforgedClips]),telemetry:await arena.evaluate(c=>({...c.dataset}))}));
 } finally {
   await browser.close();
   if(server)await new Promise(resolve=>server.httpServer.close(resolve));

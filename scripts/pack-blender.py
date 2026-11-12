@@ -8,7 +8,8 @@ source = root / ".hivemind" / "blender-frames"
 output = root / "public" / "art" / "animated"
 output.mkdir(parents=True, exist_ok=True)
 for name in ("vesper", "rook", "drone", "brute", "shooter", "spore", "hound", "elite", "queen"):
-    frames = [Image.open(source / f"{name}-{frame:02}.png").convert("RGBA") for frame in range(1, 25)]
+    rows = 8 if name == "queen" else 6
+    frames = [Image.open(source / f"{name}-{frame:02}.png").convert("RGBA") for frame in range(1, rows * 4 + 1)]
     union = Image.new("L", frames[0].size)
     for frame in frames:
         alpha = frame.getchannel("A")
@@ -21,7 +22,7 @@ for name in ("vesper", "rook", "drone", "brute", "shooter", "spore", "hound", "e
     cy = (top + bottom) // 2
     x = cx - side // 2
     y = cy - side // 2
-    atlas = Image.new("RGBA", (384, 576))
+    atlas = Image.new("RGBA", (384, rows * 96))
     for index, frame in enumerate(frames):
         tile = frame.crop((x, y, x + side, y + side)).resize((96, 96), Image.Resampling.LANCZOS)
         atlas.paste(tile, (index % 4 * 96, index // 4 * 96))

@@ -79,6 +79,7 @@ export interface Enemy {
   id: number;
   kind: EnemyKind;
   variant?: EnemyVariant;
+  attackUntil?: number;
   speed?: number;
   pos: Vec2;
   vel: Vec2;

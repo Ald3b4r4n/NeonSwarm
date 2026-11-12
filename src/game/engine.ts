@@ -693,6 +693,7 @@ function updateEnemies(state: GameState, dt: number): void {
       enemy.fireCooldown -= dt;
       if (enemy.fireCooldown <= 0) {
         fireEnemyProjectile(state, enemy);
+        if (state.run) enemy.attackUntil = state.time + .32;
         enemy.fireCooldown =
           (enemy.variant === 'spore' ? 5.8 : Math.max(0.95, 2.35 - waveNumber * 0.07)) * randomRange(state, 0.85, 1.15);
       }
@@ -813,6 +814,7 @@ function updateContactDamage(state: GameState): boolean {
     const radius = enemy.radius + player.radius;
     if (distanceSq(enemy.pos, player.pos) <= radius * radius) {
       hurtPlayer(state, enemy.contactDamage);
+      if (state.run) enemy.attackUntil = state.time + .24;
       return true;
     }
   }
@@ -914,6 +916,7 @@ function updateQueen(state: GameState, enemy: Enemy, dt: number): void {
   enemy.pos.y = clamp(enemy.pos.y + enemy.vel.y * dt, enemy.radius, ARENA_HEIGHT - enemy.radius);
   if (enemy.fireCooldown > 0) return;
   enemy.fireCooldown = pattern.cooldown;
+  enemy.attackUntil = state.time + .45;
   if (pattern.telegraph === 'summon') {
     spawnRebirthEnemy(state, 'hound', 2);
     spawnRebirthEnemy(state, 'elite', 1.4);

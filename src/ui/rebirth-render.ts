@@ -42,6 +42,10 @@ function streak(ctx: CanvasRenderingContext2D, x: number, y: number, dx: number,
   ctx.beginPath();
   ctx.moveTo(x - dx, y - dy);
   if (type === 'coil' && rank >= 2) ctx.lineTo(x - dx * .5 + px * 5, y - dy * .5 + py * 5);
+  if (type === 'lance' && rank >= 2) {
+    ctx.lineTo(x - dx * .2, y - dy * .2);
+    ctx.moveTo(x - dx * .5 + px * 3, y - dy * .5 + py * 3);
+  }
   ctx.lineTo(x, y);
   if (!reduced && rank >= 3) {
     ctx.moveTo(x - dx * .72, y - dy * .72);
@@ -98,11 +102,13 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
       }
     }
     const pattern = kind === 'queen' ? bossPattern(state.time, enemy.hp / enemy.maxHp) : undefined;
-    const special = pattern && (state.time < 661 || enemy.fireCooldown < pattern.telegraphTime);
-    const firing = enemy.kind === 'shooter' && enemy.fireCooldown > 1.7 && enemy.fireCooldown < 2.15;
-    const row = enemy.hitFlash > 0 ? 3 : special ? 5 : firing ? 2 : Math.hypot(enemy.vel.x, enemy.vel.y) > 10 ? 1 : 0;
+    const arrival = pattern && state.time >= 660 && state.time < 661;
+    const warning = pattern && enemy.fireCooldown < pattern.telegraphTime;
+    const firing = (enemy.attackUntil ?? 0) > state.time;
+    const row = arrival ? 6 : enemy.hitFlash > 0 ? 3 : warning ? 7
+      : firing ? pattern && pattern.telegraph !== 'line' ? 5 : 2 : Math.hypot(enemy.vel.x, enemy.vel.y) > 10 ? 1 : 0;
     sprite(ctx, art.animation[kind], enemy.pos, enemy.radius * (kind === 'queen' ? 4.7 : 4.2),
-      time + enemy.id * .077, enemy.vel, row);
+      time + enemy.id * .077, enemy.vel, row, arrival ? state.time - 660 : undefined);
   }
 
   if (run.ranks.orbit) {
@@ -152,6 +158,10 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
       ctx.moveTo(impact.from.x, impact.from.y);
       ctx.lineTo(impact.from.x + dx * .4 - dy * .15, impact.from.y + dy * .4 + dx * .15);
       ctx.lineTo(impact.pos.x, impact.pos.y);
+      if (rank >= 2) {
+        ctx.lineTo(impact.pos.x + dy * .045, impact.pos.y - dx * .045);
+        ctx.lineTo(impact.pos.x, impact.pos.y);
+      }
       if (rank >= 3 && !reduced) {
         ctx.moveTo(impact.from.x + dx * .4 - dy * .15, impact.from.y + dy * .4 + dx * .15);
         ctx.lineTo(impact.from.x + dx * .7 + dy * .18, impact.from.y + dy * .7 - dx * .18);

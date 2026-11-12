@@ -187,7 +187,7 @@ def configure():
 def animate(root, body, limbs, gun, glow, player, queen):
     base_z=body.location.z
     flash=part("Attack flash",(0,-.93,0),(.12,.2,.13),glow,gun)
-    for row,clip in enumerate(CLIPS):
+    for row,clip in enumerate(CLIPS + (("arrival", "charge") if queen else ())):
         for i in range(COUNT):
             frame=row*COUNT+i+1
             wave=math.sin(i*TAU/COUNT)
@@ -214,6 +214,14 @@ def animate(root, body, limbs, gun, glow, player, queen):
                 body.location.z+=.29*bump
                 gun.rotation_euler.z=.52*wave
                 strength=bump*1.5
+            elif clip=="arrival":
+                body.location.z+=.75*(1-t)
+                root.scale=(.72+.28*t, .72+.28*t, .72+.28*t)
+                body.rotation_euler.z=.32*(1-t)
+            elif clip=="charge":
+                body.location.z-=.21*bump
+                gun.rotation_euler.x=-.38*bump
+                strength=.45+bump*.75
             flash.scale=(strength*.25,strength*.34,strength*.21)
             for j,(leg,arm) in enumerate(limbs):
                 swing=math.sin(i*TAU/COUNT+j*math.pi*.79)
@@ -239,10 +247,12 @@ for name,glow in PALETTES.items():
     player=name in {"vesper","rook"}
     body,limbs,gun=character(root,name,glow) if player else creature(root,name,glow)
     animate(root,body,limbs,gun,glow,player,name=="queen")
-    scene.frame_end=len(CLIPS)*COUNT
-    for row,clip in enumerate(CLIPS):
+    clips = CLIPS + (("arrival", "charge") if name=="queen" else ())
+    scene.frame_end=len(clips)*COUNT
+    for row,clip in enumerate(clips):
         scene.timeline_markers.new(clip,frame=row*COUNT+1)
     scene.frame_set(1)
+    bpy.context.preferences.filepaths.save_version=0
     bpy.ops.wm.save_as_mainfile(filepath=str(source / (name+".blend")))
     for frame in range(1,scene.frame_end+1):
         scene.frame_set(frame)
@@ -275,6 +285,7 @@ for name, glow in (("station-prop", CYAN), ("nursery-prop", PINK)):
         core.keyframe_insert(data_path="rotation_euler", frame=i+1)
         core.keyframe_insert(data_path="scale", frame=i+1)
     scene.frame_set(1)
+    bpy.context.preferences.filepaths.save_version=0
     bpy.ops.wm.save_as_mainfile(filepath=str(source/(name+".blend")))
     for frame in range(1,5):
         scene.frame_set(frame)

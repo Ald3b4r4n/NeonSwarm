@@ -74,10 +74,10 @@ export function LaunchScreen({
     <section className="rebirth-screen" aria-labelledby="rebirth-title">
       <div className="rebirth-masthead">
         <h1 onClick={onLogoTap} id="rebirth-title" className="rebirth-title">
-          NEON SWARM <span>REBIRTH</span>
+          NEON SWARM <span>REFORGED</span>
         </h1>
         <p className="rebirth-standfirst">
-          Doze minutos para romper o enxame e derrubar a Rainha de Cromo.
+          Demonstração jogável em 3D · Vesper, Bobina de Coil e Estação Íon.
         </p>
         <p className="rebirth-record">
           Recorde <strong>{record}</strong>
@@ -86,7 +86,7 @@ export function LaunchScreen({
 
       <div className="rebirth-grid">
         <figure className="rebirth-cover">
-          <img src={cover} alt="Arte de capa de Neon Swarm Rebirth" />
+          <img src={cover} alt="Arte de capa de Neon Swarm" />
         </figure>
 
         <div className="rebirth-picks">

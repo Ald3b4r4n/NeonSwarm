@@ -3,13 +3,14 @@ import { DeveloperPanel } from './developer-panel.js';
 import { QUALITY_PRESETS, readQuality, saveQuality, type FixedQuality, type Quality } from './quality.js';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { createGame, stepGame, applyUpgrade } from '../game/engine.js';
-import { ARENA_HEIGHT, ARENA_WIDTH, type GameState, type UpgradeId, type CharacterId, type BiomeId, type WeaponId } from '../game/contracts.js';
-import { drawRebirth } from './rebirth-render.js';
-import { artUrl, loadArenaArt, type ArenaArt } from './rebirth-art.js';
+import { type GameState, type UpgradeId, type CharacterId, type BiomeId, type WeaponId } from '../game/contracts.js';
+import { artUrl } from './rebirth-art.js';
 import { LaunchScreen } from './rebirth-shell.js';
 import { EXTRACTION_DEADLINE, RUN_SECONDS } from '../game/rebirth-encounters.js';
 import { WEAPONS, WEAPON_IDS } from '../game/rebirth-weapons.js';
 import { readMotion, readRecord, saveMotion, saveRecord } from './storage.js';
+import type { ReforgedScene } from './reforged/scene.js';
+import { ReforgedAudio } from './reforged-audio.js';
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 const characters = [
@@ -41,12 +42,13 @@ export function App() {
   const [character, setCharacter] = useState<CharacterId>('vesper');
   const [biome, setBiome] = useState<BiomeId>('station');
   const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const art = useRef<ArenaArt | null>(null);
+  const [loadError, setLoadError] = useState('');
   const loadingRef = useRef(false);
   const [record, setRecord] = useState(readRecord);
   const [reduced, setReduced] = useState(readMotion);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const renderer = useRef<ReforgedScene | null>(null);
+  const audio = useRef(new ReforgedAudio());
   const field = useRef<HTMLDivElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
   const keys = useRef(new Set<string>());
@@ -70,10 +72,17 @@ export function App() {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
-    setLoadError(false);
+    setLoadError('');
+    if (!options) void tryLandscape();
     try {
       const chosen = options ? { ...selected.current } : { character, biome };
-      art.current = await loadArenaArt(chosen.biome);
+      if (!renderer.current) {
+        const node = canvas.current;
+        if (!node) throw new Error('Canvas não disponível.');
+        const { ReforgedScene } = await import('./reforged/scene.js');
+        renderer.current = await ReforgedScene.create(node);
+      }
+      audio.current.reset();
       game.current = createGame(Date.now() >>> 0, chosen);
       if (options && "weapon" in chosen && chosen.weapon) {
         game.current = applyDeveloperAction(game.current, { type: 'weapon/set-rank', weapon: chosen.weapon, rank: 1 });
@@ -94,8 +103,8 @@ export function App() {
       setStarted(true);
       publish();
       requestAnimationFrame(() => field.current?.focus());
-    } catch {
-      setLoadError(true);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
     } finally {
       loadingRef.current = false;
       setLoading(false);
@@ -203,22 +212,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const node = canvas.current!;
+    const sound = audio.current;
     let automatic: FixedQuality = 'medium';
-    let applied: FixedQuality | undefined;
-    const resize = () => {
-      const width = node.getBoundingClientRect().width;
-      applied = controls.current.quality === 'auto' ? automatic : controls.current.quality;
-      const dpr = Math.min(window.devicePixelRatio || 1, QUALITY_PRESETS[applied].dpr);
-      const pixelWidth = Math.max(1, Math.round(width * dpr));
-      const pixelHeight = Math.max(1, Math.round(width * ARENA_HEIGHT / ARENA_WIDTH * dpr));
-      if (node.width !== pixelWidth) node.width = pixelWidth;
-      if (node.height !== pixelHeight) node.height = pixelHeight;
-    };
-    const observer = new ResizeObserver(resize); observer.observe(node); resize();
     let frame = 0, previous = 0, accumulator = 0, lastHud = 0, lastDraw = 0;
-    let sampleStart = 0, sampleFrames = 0, slowSamples = 0, deathAt = 0;
-    const ctx = node.getContext('2d', { alpha: false });
+    let sampleStart = 0, sampleFrames = 0, slowSamples = 0;
     const tick = (now: number) => {
       const current = controls.current;
       if (current.started && !current.paused && !current.portraitBlocked && !developer.current.open && game.current.phase === 'playing') {
@@ -233,7 +230,7 @@ export function App() {
           sampleFrames = 0;
         }
       } else { sampleStart = 0; sampleFrames = 0; }
-      if (applied !== (current.quality === 'auto' ? automatic : current.quality)) resize();
+      const applied = current.quality === 'auto' ? automatic : current.quality;
       const dt = previous ? Math.min((now - previous) / 1000, .05) : 0; previous = now;
       const before = game.current.phase;
       if (current.started && !current.paused && !current.portraitBlocked && !developer.current.open && before === 'playing') {
@@ -242,20 +239,21 @@ export function App() {
           const pressed = keys.current;
           const x = Number(pressed.has('d') || pressed.has('arrowright')) - Number(pressed.has('a') || pressed.has('arrowleft')) + stick.current.x;
           const y = Number(pressed.has('s') || pressed.has('arrowdown')) - Number(pressed.has('w') || pressed.has('arrowup')) + stick.current.y;
-          game.current = stepGame(game.current, { move: { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)) }, pulse: pulse.current }, 1 / 60);
+          game.current = stepGame(game.current, { move: { x: (x + y) * Math.SQRT1_2, y: (x - y) * Math.SQRT1_2 }, pulse: pulse.current }, 1 / 60);
           pulse.current = false; accumulator -= 1 / 60;
         }
       } else accumulator = 0;
       if (before !== game.current.phase || now - lastHud >= 100) { setSnapshot(game.current); lastHud = now; }
-      if (game.current.phase === 'gameover') deathAt ||= now; else deathAt = 0;
-      if (ctx && art.current && current.started && (!developer.current.limit || now - lastDraw >= 1000 / developer.current.limit - 1)) {
-        drawRebirth(ctx, game.current, art.current, current.reduced || !QUALITY_PRESETS[applied ?? 'medium'].effects, deathAt ? Math.min(1, (now - deathAt) / 540) : 0);
+      if (current.started && (!developer.current.limit || now - lastDraw >= 1000 / developer.current.limit - 1)) {
+        renderer.current?.setQuality(applied);
+        renderer.current?.render(game.current, current.reduced || !QUALITY_PRESETS[applied].effects);
+        sound.update(game.current);
         lastDraw = now;
       }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+    return () => { cancelAnimationFrame(frame); renderer.current?.dispose(); renderer.current = null; sound.dispose(); };
   }, []);
 
   useEffect(() => {
@@ -356,10 +354,10 @@ export function App() {
       onCharacter={id => { if (id === 'vesper' || id === 'rook') setCharacter(id); }}
       onBiome={id => { if (id === 'station' || id === 'nursery') setBiome(id); }} onPlay={() => { void begin(); }} onLogoTap={logoTap} loading={loading} />}
     {!started && qualitySelect}
-    {loading && <p className="load-state" role="status">Carregando ilustrações da arena…</p>}
-    {loadError && <p className="load-state" role="alert">Falha ao carregar a arena. Tente jogar novamente.</p>}
+    {loading && <p className="load-state" role="status">Carregando a Estação Íon e os modelos 3D…</p>}
+    {loadError && <p className="load-state model-error" role="alert">Falha ao carregar a arena. Tente jogar novamente. {loadError}</p>}
     <div hidden={!started} className="match">
-    <header className="masthead"><a className="brand" href="#arena" onClick={event => { event.preventDefault(); logoTap(); }}>NEON<span>SWARM</span></a><span className={testMode ? "edition test-edition" : "edition"}>{testMode ? "MODO TESTE" : "REBIRTH"}</span></header>
+    <header className="masthead"><a className="brand" href="#arena" onClick={event => { event.preventDefault(); logoTap(); }}>NEON<span>SWARM</span></a><span className={testMode ? "edition test-edition" : "edition"}>{testMode ? "MODO TESTE" : "REFORGED"}</span></header>
     <section className="dashboard" aria-label="Painel da partida">
       <div className="vitals"><span>VIDA <strong data-testid="health">{Math.ceil(p.hp)} / {p.maxHp}</strong></span><meter aria-label="Vida" min={0} max={p.maxHp} value={p.hp} /><span>ENERGIA <strong>{Math.floor(p.energy)} / {p.maxEnergy}</strong></span><meter className="energy" aria-label="Energia" min={0} max={p.maxEnergy} value={p.energy} /></div>
       <div className="metric"><span>NÍVEL</span><strong data-testid="level">{p.level.toString().padStart(2, '0')}</strong><meter aria-label="Experiência até o próximo nível" max={p.xpToNext} value={Math.min(p.xp, p.xpToNext)} /></div>
@@ -403,7 +401,7 @@ export function App() {
     <footer className="toolbar"><div><span className="status-dot" />{paused ? 'PAUSADO' : snapshot.phase === 'upgrade' ? 'EVOLUÇÃO DISPONÍVEL' : snapshot.phase === 'gameover' ? 'PARTIDA ENCERRADA' : `PONTOS ${snapshot.score.toLocaleString('pt-BR')}`}</div><div className="actions"><button disabled={!active} onClick={() => { pulse.current = true; field.current?.focus(); }}>Pulso <kbd>Espaço</kbd></button><button aria-label={paused ? 'Retomar' : 'Pausar'} disabled={!started || snapshot.phase !== 'playing'} onClick={() => { clearInput(); if (paused) resume(); else setPaused(true); }}>{paused ? 'Retomar' : 'Pausar'} <kbd>P</kbd></button></div></footer>
     <div className="preferences"><span>WASD / setas · arraste para mover · 1–3 para evoluir</span><label><input type="checkbox" checked={reduced} onChange={event => { setReduced(event.target.checked); saveMotion(event.target.checked); }} /> Reduzir efeitos</label></div>
     </div>
-    {fpsShown && <output className="performance-display" aria-label="Desempenho">{fps} FPS</output>}
+    {fpsShown && <output className="performance-display" aria-label="Desempenho">{fps} FPS · {canvas.current?.dataset.drawCalls ?? "—"} draws · {canvas.current?.dataset.activeTriangles ?? "—"} tris · CPU {canvas.current?.dataset.cpuMs ?? "—"} ms</output>}
     {developerOpen && <DeveloperPanel state={snapshot} onAction={handleDeveloperAction} onClose={closeDeveloper}
       session={developer.current} /> }
   </main>;

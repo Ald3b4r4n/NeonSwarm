@@ -26,3 +26,12 @@ for name in ("vesper", "rook", "drone", "brute", "shooter", "spore", "hound", "e
         tile = frame.crop((x, y, x + side, y + side)).resize((96, 96), Image.Resampling.LANCZOS)
         atlas.paste(tile, (index % 4 * 96, index // 4 * 96))
     atlas.save(output / (name + ".webp"), "WEBP", quality=88, method=6)
+
+for name in ("station-prop", "nursery-prop"):
+    atlas = Image.new("RGBA", (384, 96))
+    for index in range(4):
+        frame = Image.open(source / f"{name}-{index+1:02}.png").convert("RGBA")
+        if frame.getchannel("A").getextrema() != (0, 255):
+            raise ValueError(f"invalid alpha for {name}")
+        atlas.paste(frame.resize((96, 96), Image.Resampling.LANCZOS), (index * 96, 0))
+    atlas.save(output / (name + ".webp"), "WEBP", quality=88, method=6)

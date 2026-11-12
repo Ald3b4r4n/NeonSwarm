@@ -249,3 +249,34 @@ for name,glow in PALETTES.items():
         scene.render.filepath=str(frames / f"{name}-{frame:02d}.png")
         bpy.ops.render.render(write_still=True)
 
+
+
+for name, glow in (("station-prop", CYAN), ("nursery-prop", PINK)):
+    if cfg.only and name != cfg.only and cfg.only != "props":
+        continue
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    material_cache.clear()
+    scene, camera = configure()
+    camera.data.ortho_scale = 3.0
+    root = pivot(name, (0, 0, .19))
+    part("Socket", (0,0,.04), (.79,.79,.17), DARK, root, "smooth")
+    part("Industrial flange", (0,0,.28), (.72,.72,.20), STEEL, root, "ring")
+    core = pivot("Powered rotor", (0,0,.45), root)
+    part("Core", (0,0,.18), (.46,.46,.50), glow, core, "smooth")
+    for i in range(5):
+        angle = i * TAU / 5
+        x,y = math.cos(angle),math.sin(angle)
+        link("Cage strut", (.67*x,.67*y,.10), (.34*x,.34*y,.54), .083, BONE if name=="nursery-prop" else STEEL, root)
+        part("Rotor vane", (.34*x,.34*y,.16), (.17,.16,.10), glow, core)
+    scene.frame_end = 4
+    for i in range(4):
+        core.rotation_euler.z = TAU*i/4
+        core.scale.z = 1 + .12 * math.sin(i*TAU/4)
+        core.keyframe_insert(data_path="rotation_euler", frame=i+1)
+        core.keyframe_insert(data_path="scale", frame=i+1)
+    scene.frame_set(1)
+    bpy.ops.wm.save_as_mainfile(filepath=str(source/(name+".blend")))
+    for frame in range(1,5):
+        scene.frame_set(frame)
+        scene.render.filepath=str(frames/f"{name}-{frame:02d}.png")
+        bpy.ops.render.render(write_still=True)

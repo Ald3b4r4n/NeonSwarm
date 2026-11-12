@@ -17,6 +17,7 @@ import {
   type Enemy,
   type EnemyKind,
   type GameState,
+  type Projectile,
   type RunConfig,
   type WeaponId,
   type EnemyVariant,

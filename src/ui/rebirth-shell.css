@@ -208,3 +208,15 @@
     transition: none !important;
   }
 }
+
+[aria-label="Personagens"] .rebirth-card__thumb {
+  object-fit: contain;
+  background: radial-gradient(ellipse at center, #1e3a4b, #0b151e 70%);
+}
+
+@media (min-width: 900px) {
+  .rebirth-cover img {
+    height: 570px;
+    object-position: 68% center;
+  }
+}

@@ -102,3 +102,16 @@ describe('Rebirth: partida integrada', () => {
     expect(first).toEqual(play());
   });
 });
+
+it('limita a pressão simultânea das elites e a velocidade de carga do hound', () => {
+  const state = fixture();
+  state.time = 500;
+  state.run!.spawnIndex = 0;
+  state.wave.spawnTimer = 0;
+  for (let i = 0; i < 3; i++) targetAt(state, 720 + i * 40, 420, { variant: 'elite' });
+  targetAt(state, 720, 330, { id: 9.5, variant: 'hound', kind: 'drone', speed: 120 });
+  const next = stepGame(state, idle, 1 / 60);
+  expect(next.enemies.filter(enemy => enemy.variant === 'elite')).toHaveLength(3);
+  const hound = next.enemies.find(enemy => enemy.id === 9.5)!;
+  expect(Math.hypot(hound.vel.x, hound.vel.y)).toBeCloseTo(184);
+});

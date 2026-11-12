@@ -1,39 +1,18 @@
-# NEON SWARM
+# NEON SWARM: REBIRTH
 
-Um arena survivor 2D em uma arena cyberpunk. A nave dispara automaticamente no inimigo mais próximo. Desvie dos enxames, recolha energia e escolha upgrades conforme a pressão aumenta.
+Arena survivor sci-fi para navegador. Escolha Vesper ou Rook, atravesse a Estação Íon ou o Viveiro Rubro e sobreviva por 12 minutos para derrotar a Rainha de Cromo.
 
-## Jogar
+**[Jogar Rebirth](https://ald3b4r4n.github.io/NeonSwarm/rebirth/)** · [Versão original](https://ald3b4r4n.github.io/NeonSwarm/)
 
-[Abrir NEON SWARM no GitHub Pages](https://ald3b4r4n.github.io/NeonSwarm/)
+![Seleção de personagem e bioma no jogo](docs/screenshots/menu.jpg)
 
-- **Computador** — WASD ou setas para mover. Espaço ativa o pulso. Esc ou P pausa.
-- **Celular** — arraste sobre a arena para mover. Use os botões na tela para pulso, pausa e upgrades.
-- **Evolução** — escolha um upgrade ao subir de nível. O recorde fica no armazenamento local do navegador.
+- **Teclado** — WASD ou setas para mover, Espaço para pulso, Esc ou P para pausar e 1–3 para escolher upgrades.
+- **Toque** — arraste na arena para mover e use os botões para pulso, pausa e upgrades.
+- **Combate** — ataques automáticos, seis armas com cinco ranks, oito linhas de upgrades de atributos e duas sinergias.
+- **Partida** — seis famílias biomecânicas, obstáculos por bioma, elites e uma chefe com rajadas, espirais e invocação de reforços.
 
-## Desenvolvimento
+[Início](docs/screenshots/inicio.jpg) · [Horda](docs/screenshots/horda.jpg) · [Rainha](docs/screenshots/rainha.jpg) · [Resultado](docs/screenshots/resultado.jpg) · [Clipe](docs/screenshots/partida.webm)
 
-Requer Node.js 24.
+Requer Node.js 24. Execute `npm ci` e `npm run dev`. Rode `npm run build`, `npm run typecheck`, `npm run lint` e `npm test` para validar. Instale Chromium via `npx playwright install chromium` e execute `npm run test:e2e` contra o build.
 
-```sh
-npm ci
-npm run dev
-```
-
-React cuida dos menus, do HUD e da entrada. O Canvas desenha a arena e as entidades. O motor TypeScript é determinístico e isolado do DOM. Os tipos compartilhados ficam em `src/game/contracts.ts`. [Arquitetura](docs/arquitetura.md)
-
-## Validação
-
-```sh
-npm run build
-npm run typecheck
-npm run lint
-npm test
-npx playwright install chromium
-npm run test:e2e
-```
-
-Os testes E2E servem o build de produção. O jogo funciona no navegador, com gráficos procedurais e persistência local.
-
-## Créditos
-
-Projeto desenvolvido como desafio operacional do Hivemind. Codex CLI coordenou pelo MCP. Claude Code definiu os contratos, OpenCode Go trabalhou no motor e Codex CLI trabalhou na interface como fallback do Muse Code. Os resultados de cada executor e a situação da publicação estão no [relatório P004](docs/p004.md).
+[Arquitetura proposta pelo Claude](docs/rebirth-arquitetura.md) · [Direção de arte do Spark](docs/rebirth-arte.md) · [Implementação, assets, créditos e testes](docs/rebirth.md)

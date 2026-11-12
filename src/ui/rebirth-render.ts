@@ -1,6 +1,6 @@
 import { ARENA_WIDTH as W, ARENA_HEIGHT as H, type GameState, type Vec2, type WeaponId } from '../game/contracts.js';
 import { makeWeaponAttack } from '../game/rebirth-weapons.js';
-import { BIOMES } from '../game/rebirth-encounters.js';
+import { BIOMES, bossPattern } from '../game/rebirth-encounters.js';
 import type { ArenaArt } from './rebirth-art.js';
 
 const weaponColors: Record<WeaponId, string> = {
@@ -68,7 +68,17 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   for (const enemy of state.enemies) {
     const kind = enemy.variant ?? enemy.kind;
     if (kind === 'queen') {
-      halo(ctx, enemy.pos, enemy.radius + 17 + Math.sin(time * 6) * 7, enemy.fireCooldown < .48 ? '#ffc491' : '#e55c9eaa', 3);
+      const pattern = bossPattern(state.time, enemy.hp / enemy.maxHp);
+      const warning = enemy.fireCooldown < pattern.telegraphTime;
+      halo(ctx, enemy.pos, enemy.radius + 17 + Math.sin(time * 6) * 7, warning ? '#ffc491' : '#e55c9eaa', 3);
+      if (warning && pattern.telegraph === 'line') {
+        ctx.strokeStyle = '#ffc49199';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(enemy.pos.x, enemy.pos.y);
+        ctx.lineTo(player.pos.x, player.pos.y);
+        ctx.stroke();
+      }
     }
     sprite(ctx, art.sprites[kind], enemy.pos, enemy.radius * (kind === 'queen' ? 3.7 : 3.3), time + enemy.id, enemy.vel, enemy.hitFlash > 0);
   }

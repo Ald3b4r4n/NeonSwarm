@@ -643,7 +643,8 @@ function updateEnemies(state: GameState, dt: number): void {
     }
     const baseSpeed = enemy.speed ?? ENEMY_TEMPLATES[enemy.kind].speed;
     const charge = enemy.variant === 'hound' && (state.time + enemy.id) % 5 > 4.2;
-    const speed = baseSpeed * Math.min(1.55, 1 + (waveNumber - 1) * 0.035) * (charge ? 1.65 : 1);
+    const scaledSpeed = baseSpeed * Math.min(1.55, 1 + (waveNumber - 1) * 0.035);
+    const speed = charge ? Math.min(184, scaledSpeed * 1.45) : scaledSpeed;
 
     if (enemy.kind === 'drone') {
       // Rápido e direto, com uma leve oscilação lateral para não ser uma linha reta.
@@ -841,6 +842,7 @@ function separateObstacles(state: GameState, pos: Vec2, radius: number): void {
 
 function spawnRebirthEnemy(state: GameState, variant: EnemyVariant, scale: number): void {
   if (state.enemies.length >= MAX_ENEMIES) return;
+  if (variant === 'elite' && state.enemies.filter(enemy => enemy.variant === 'elite').length >= 3) variant = 'brute';
   const def = ENEMIES[variant];
   const kind: EnemyKind = variant === 'spore' || variant === 'shooter' ? 'shooter'
     : variant === 'brute' || variant === 'elite' || variant === 'queen' ? 'brute' : 'drone';
@@ -878,7 +880,7 @@ function updateEncounter(state: GameState, dt: number): void {
   if (state.wave.spawnTimer > 0 || state.enemies.length >= MAX_ENEMIES) return;
   const encounter = encounterAt(state.time, run.spawnIndex++, run.biome);
   const variant = encounter.kind === 'queen' ? 'elite'
-    : encounter.kind === 'spore' && state.time < 90 && run.spawnIndex % 6 !== 0 ? 'drone'
+    : encounter.kind === 'spore' && state.time < 145 && run.spawnIndex % (state.time < 90 ? 6 : 4) !== 0 ? 'drone'
     : encounter.kind === 'shooter' && state.time < 300 && run.spawnIndex % 4 !== 0 ? 'drone' : encounter.kind;
   spawnRebirthEnemy(state, variant, encounter.scale);
   if (state.time > 275 && !run.bossSpawned) {

@@ -109,6 +109,7 @@ test('a partida progride, oferece upgrades, causa dano e salva o recorde após a
   expect(sawUpgrade).toBe(true);
   expect(wave).toBeGreaterThan(1);
   await expect(restart).toBeVisible();
+  if (process.env.REBIRTH_CAPTURE === "1") await page.screenshot({ path: "docs/screenshots/resultado.jpg", fullPage: true, quality: 88 });
   const record = await page.evaluate(() => JSON.parse(localStorage.getItem('neonswarm.v1') ?? 'null'));
   expect(record.highScore).toBeGreaterThan(0);
   await restart.click();

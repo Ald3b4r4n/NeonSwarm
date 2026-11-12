@@ -174,3 +174,9 @@
 
 .upgrade-preview { color: #91e5f5; font-variant-numeric: tabular-nums; }
 .portrait-prompt button + button { margin-left: .45rem; }
+
+.match .test-edition { color: #ffd291; font-weight: 900; }
+@media (orientation: landscape) and (pointer: coarse) {
+  .match .masthead:has(.test-edition) { display: grid; gap: 2px; }
+  .match .test-edition { font-size: 9px; white-space: nowrap; }
+}

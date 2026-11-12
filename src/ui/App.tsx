@@ -359,7 +359,7 @@ export function App() {
     {loading && <p className="load-state" role="status">Carregando ilustrações da arena…</p>}
     {loadError && <p className="load-state" role="alert">Falha ao carregar a arena. Tente jogar novamente.</p>}
     <div hidden={!started} className="match">
-    <header className="masthead"><a className="brand" href="#arena" onClick={event => { event.preventDefault(); logoTap(); }}>NEON<span>SWARM</span></a><span className="edition">{testMode ? "MODO TESTE" : "REBIRTH"}</span></header>
+    <header className="masthead"><a className="brand" href="#arena" onClick={event => { event.preventDefault(); logoTap(); }}>NEON<span>SWARM</span></a><span className={testMode ? "edition test-edition" : "edition"}>{testMode ? "MODO TESTE" : "REBIRTH"}</span></header>
     <section className="dashboard" aria-label="Painel da partida">
       <div className="vitals"><span>VIDA <strong data-testid="health">{Math.ceil(p.hp)} / {p.maxHp}</strong></span><meter aria-label="Vida" min={0} max={p.maxHp} value={p.hp} /><span>ENERGIA <strong>{Math.floor(p.energy)} / {p.maxEnergy}</strong></span><meter className="energy" aria-label="Energia" min={0} max={p.maxEnergy} value={p.energy} /></div>
       <div className="metric"><span>NÍVEL</span><strong data-testid="level">{p.level.toString().padStart(2, '0')}</strong><meter aria-label="Experiência até o próximo nível" max={p.xpToNext} value={Math.min(p.xp, p.xpToNext)} /></div>

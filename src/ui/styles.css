@@ -17,3 +17,152 @@
   .match .overlay { align-items: safe center; }
   .match .secondary { margin-left: 0; }
 }
+
+.virtual-controls { display: none; }
+.portrait-prompt { display: none; }
+
+@media (pointer: coarse) {
+  .virtual-controls { position: absolute; z-index: 5; inset: 0; display: block; pointer-events: none; }
+  .virtual-joystick {
+    position: absolute;
+    z-index: 5;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    width: clamp(96px, 27vmin, 148px);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    border: 1px solid #9beef451;
+    border-radius: 50%;
+    background: #07111c8c;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+  }
+  .virtual-joystick.disabled { opacity: .45; }
+  .joystick-ring { position: absolute; inset: 21%; border: 1px solid #b2faff39; border-radius: 50%; }
+  .joystick-knob { position: relative; width: 38%; aspect-ratio: 1; border: 1px solid #a8faff; border-radius: 50%; background: #6deff574; box-shadow: 0 0 18px #6deff54a; pointer-events: none; }
+  .touch-actions { position: absolute; z-index: 6; right: max(16px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); display: flex; align-items: end; gap: clamp(10px, 3vw, 24px); pointer-events: none; }
+  .touch-actions button { width: clamp(54px, 14vmin, 72px); aspect-ratio: 1; padding: 0; border-radius: 50%; border-color: #7debf0a6; background: #091923d9; color: #9dfaff; font-size: clamp(20px, 5vmin, 28px); font-weight: 800; box-shadow: 0 0 22px #42dce52b; pointer-events: auto; touch-action: manipulation; }
+  .touch-actions button:first-child { color: #ffce7b; border-color: #ffce7b88; }
+  .portrait-prompt { position: absolute; z-index: 12; display: flex; flex-direction: column; align-items: center; gap: 8px; top: 50%; left: 50%; width: min(88%, 380px); padding: 20px; transform: translate(-50%, -50%); text-align: center; border: 1px solid #4b7486; border-radius: 8px; background: #07111cf2; box-shadow: 0 14px 50px #000b; }
+  .portrait-prompt p { margin: 0; color: #bed1dd; }
+  .portrait-prompt .eyebrow { color: #8ef6fa; }
+  .portrait-prompt button { margin-top: 4px; padding: 10px 16px; }
+}
+
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 600px) {
+  .match {
+    position: fixed;
+    z-index: 2;
+    inset: 0;
+    width: auto;
+    max-width: none;
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow: hidden;
+    background: #05070c;
+  }
+  .match .arena {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 0;
+    border: 0;
+    background: radial-gradient(ellipse at center, #101a29 0, #060a10 75%);
+  }
+  .match .arena canvas {
+    width: min(100vw, 133.333dvh);
+    max-width: 100%;
+    max-height: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    border: 1px solid #304351;
+  }
+  .match .masthead {
+    position: absolute;
+    z-index: 3;
+    top: max(5px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    width: 118px;
+    margin: 0;
+    padding: 5px 7px;
+    border: 1px solid #233344;
+    border-radius: 4px;
+    background: #0b111be8;
+  }
+  .match .brand { font-size: 13px; letter-spacing: .06em; }
+  .match .edition { font-size: 7px; letter-spacing: .12em; }
+  .match .dashboard {
+    position: absolute;
+    z-index: 3;
+    top: max(5px, env(safe-area-inset-top));
+    left: max(132px, calc(env(safe-area-inset-left) + 126px));
+    right: max(7px, env(safe-area-inset-right));
+    display: grid;
+    grid-template-columns: 1.55fr repeat(5, minmax(42px, .72fr));
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 4px 7px;
+    border: 1px solid #233344;
+    border-radius: 4px;
+    background: #0b111be8;
+  }
+  .match .vitals span { font-size: 8px; letter-spacing: 0; }
+  .match .vitals meter { height: 3px; margin: 3px 0; }
+  .match .metric { gap: 2px; padding-left: 6px; }
+  .match .metric > span { font-size: 7px; letter-spacing: .06em; }
+  .match .metric strong { font-size: 13px; }
+  .match .metric meter { height: 3px; margin: 1px 0; }
+  .match .arsenal {
+    position: absolute;
+    z-index: 3;
+    top: max(50px, calc(env(safe-area-inset-top) + 45px));
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    min-height: 0;
+    padding: 0;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+  }
+  .match .arsenal span { padding: 2px 5px; white-space: nowrap; font-size: 9px; }
+  .match .boss-status { position: absolute; z-index: 3; top: max(72px, calc(env(safe-area-inset-top) + 65px)); left: 50%; width: min(40vw, 260px); padding: 3px 8px; transform: translateX(-50%); background: #351625df; font-size: 8px; }
+  .match .boss-status meter { height: 3px; margin-top: 2px; }
+  .match .toolbar {
+    position: absolute;
+    z-index: 4;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(5px, env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    min-height: 26px;
+    padding: 3px 7px;
+    border: 0;
+    background: linear-gradient(90deg, #08101bc9, #08101b88);
+  }
+  .match .toolbar > div:first-child { font-size: 8px; }
+  .match .toolbar .actions { display: none; }
+  .match .preferences { display: none; }
+  .match .virtual-joystick { bottom: max(34px, calc(env(safe-area-inset-bottom) + 28px)); }
+  .match .touch-actions { bottom: max(42px, calc(env(safe-area-inset-bottom) + 36px)); }
+  .match .overlay { z-index: 10; padding: 8px; }
+  .match .dialog { max-width: min(720px, 94vw); padding: 8px; }
+  .match .dialog h2 { margin: 5px 0; font-size: clamp(18px, 4.5vh, 28px); }
+  .match .dialog p { margin: 4px 0; font-size: 11px; line-height: 1.35; }
+  .match .dialog .primary { min-width: 140px; margin-top: 7px; padding: 9px 14px; }
+  .match .upgrades { gap: 7px; margin-top: 8px; }
+  .match .upgrades button { gap: 5px; padding: 8px; }
+  .match .upgrades strong { font-size: 13px; }
+  .match .upgrades button > span:last-child { font-size: 10px; line-height: 1.3; }
+}

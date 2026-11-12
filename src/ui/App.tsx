@@ -22,6 +22,9 @@ export function App() {
   const game = useRef<GameState>(snapshot);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [portraitTouch, setPortraitTouch] = useState(false);
+  const [portraitDismissed, setPortraitDismissed] = useState(false);
+  const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
   const [character, setCharacter] = useState<CharacterId>('vesper');
   const [biome, setBiome] = useState<BiomeId>('station');
   const [loading, setLoading] = useState(false);
@@ -36,14 +39,26 @@ export function App() {
   const keys = useRef(new Set<string>());
   const stick = useRef({ x: 0, y: 0 });
   const pointer = useRef<{ id: number; x: number; y: number } | null>(null);
+  const joystickPointer = useRef<{ id: number; centerX: number; centerY: number; radius: number } | null>(null);
   const pulse = useRef(false);
   const controls = useRef({ started, paused, reduced });
   controls.current = { started, paused, reduced };
-  const clearInput = () => { keys.current.clear(); stick.current = { x: 0, y: 0 }; pulse.current = false; pointer.current = null; };
+  const clearInput = () => {
+    keys.current.clear();
+    stick.current = { x: 0, y: 0 };
+    pulse.current = false;
+    pointer.current = null;
+    joystickPointer.current = null;
+    setJoystickOffset({ x: 0, y: 0 });
+  };
   const publish = () => setSnapshot(game.current);
   function choose(id: UpgradeId) { game.current = applyUpgrade(game.current, id); clearInput(); publish(); field.current?.focus(); }
   async function begin() {
     if (loadingRef.current) return;
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      const orientation = screen.orientation as ScreenOrientation & { lock?: (value: 'landscape') => Promise<void> };
+      void orientation.lock?.('landscape').catch(() => undefined);
+    }
     loadingRef.current = true;
     setLoading(true);
     setLoadError(false);
@@ -52,6 +67,7 @@ export function App() {
       game.current = createGame(Date.now() >>> 0, { character, biome });
       clearInput();
       setPaused(false);
+      setPortraitDismissed(false);
       setStarted(true);
       publish();
       requestAnimationFrame(() => field.current?.focus());
@@ -63,6 +79,24 @@ export function App() {
     }
   }
   function resume() { clearInput(); setPaused(false); field.current?.focus(); }
+
+  useEffect(() => {
+    const coarsePointer = window.matchMedia('(pointer: coarse)');
+    const updateOrientation = () => {
+      const portrait = window.matchMedia('(orientation: portrait)').matches;
+      setPortraitTouch(coarsePointer.matches && portrait);
+      if (!portrait) setPortraitDismissed(false);
+    };
+    updateOrientation();
+    window.addEventListener('resize', updateOrientation);
+    window.addEventListener('orientationchange', updateOrientation);
+    coarsePointer.addEventListener('change', updateOrientation);
+    return () => {
+      window.removeEventListener('resize', updateOrientation);
+      window.removeEventListener('orientationchange', updateOrientation);
+      coarsePointer.removeEventListener('change', updateOrientation);
+    };
+  }, []);
 
   useEffect(() => {
     const node = canvas.current!;
@@ -141,6 +175,37 @@ export function App() {
     stick.current = { x: x / length, y: y / length };
   }
   function pointerEnd(event: PointerEvent<HTMLDivElement>) { if (pointer.current?.id === event.pointerId) { pointer.current = null; stick.current = { x: 0, y: 0 }; } }
+  function joystickDown(event: PointerEvent<HTMLDivElement>) {
+    if (!active || joystickPointer.current || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const radius = bounds.width * .32;
+    joystickPointer.current = { id: event.pointerId, centerX: bounds.left + bounds.width / 2, centerY: bounds.top + bounds.height / 2, radius };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    joystickMove(event);
+  }
+  function joystickMove(event: PointerEvent<HTMLDivElement>) {
+    const origin = joystickPointer.current;
+    if (!origin || origin.id !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const dx = (event.clientX - origin.centerX) / origin.radius;
+    const dy = (event.clientY - origin.centerY) / origin.radius;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    const x = dx / length;
+    const y = dy / length;
+    stick.current = { x, y };
+    setJoystickOffset({ x: x * origin.radius, y: y * origin.radius });
+  }
+  function joystickEnd(event: PointerEvent<HTMLDivElement>) {
+    if (joystickPointer.current?.id !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    joystickPointer.current = null;
+    stick.current = { x: 0, y: 0 };
+    setJoystickOffset({ x: 0, y: 0 });
+  }
   const p = snapshot.player;
   const boss = snapshot.enemies.find(enemy => enemy.variant === 'queen');
   return <main className="shell">
@@ -169,6 +234,21 @@ export function App() {
     </section>}
     <div id="arena" ref={field} className={`arena ${active ? 'active' : ''}`} tabIndex={0} aria-label="Campo de jogo" data-player-x={p.pos.x} data-player-y={p.pos.y} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onLostPointerCapture={pointerEnd}>
       <canvas ref={canvas} aria-label="Arena" data-testid="arena" data-player-x={p.pos.x} data-player-y={p.pos.y} width={960} height={720}>Arena de NEON SWARM. Use WASD ou setas para mover e Espaço para pulso.</canvas>
+      <div className="virtual-controls" data-testid="virtual-controls" aria-label="Controles por toque">
+        <div className={`virtual-joystick ${active ? '' : 'disabled'}`} role="group" aria-label="Joystick virtual" onPointerDown={joystickDown} onPointerMove={joystickMove} onPointerUp={joystickEnd} onPointerCancel={joystickEnd} onLostPointerCapture={joystickEnd}>
+          <span className="joystick-ring" />
+          <span className="joystick-knob" style={{ transform: `translate(${joystickOffset.x}px, ${joystickOffset.y}px)` }} />
+        </div>
+        <div className="touch-actions">
+          <button type="button" aria-label="Pulso" disabled={!active} onPointerDown={event => event.stopPropagation()} onClick={() => { pulse.current = true; field.current?.focus(); }}>✦</button>
+          <button type="button" aria-label={paused ? 'Retomar' : 'Pausar'} disabled={!started || snapshot.phase !== 'playing'} onPointerDown={event => event.stopPropagation()} onClick={() => { clearInput(); if (paused) resume(); else setPaused(true); }}>{paused ? '▶' : 'Ⅱ'}</button>
+        </div>
+      </div>
+      {started && portraitTouch && !portraitDismissed && <aside className="portrait-prompt" role="status">
+        <p className="eyebrow">MELHOR EM LANDSCAPE</p>
+        <p>Gire o aparelho para ver mais da arena.</p>
+        <button type="button" onClick={() => setPortraitDismissed(true)}>Seguir no retrato</button>
+      </aside>}
       {(paused || snapshot.phase !== 'playing') && <div className="overlay" onPointerDown={event => event.stopPropagation()}><section className="dialog" aria-label={paused ? 'Jogo pausado' : snapshot.phase === 'upgrade' ? 'Escolha uma melhoria' : 'Fim de partida'}>
         {paused ? <><p className="eyebrow">SISTEMA EM ESPERA</p><h2>Pausado</h2><p>Respire. A arena espera por você.</p><button ref={primary} className="primary" onClick={resume}>Retomar</button></> : snapshot.phase === 'upgrade' ? <><p className="eyebrow">NÍVEL {p.level}</p><h2>Escolha sua evolução</h2><p>Selecione uma melhoria para continuar.</p><div className="upgrades">{snapshot.upgradeOptions.map((option, index) => <button ref={index === 0 ? primary : undefined} key={option.id} onClick={() => choose(option.id)}><span className="eyebrow">{index + 1} · NÍVEL {option.nextLevel}</span><strong>{option.title}</strong><span>{option.description}</span></button>)}</div></> : <><p className="eyebrow">SINAL ENCERRADO</p><h2>{snapshot.phase === 'victory' ? 'Setor recuperado' : 'Fim de jogo'}</h2><p className="score">{snapshot.score.toLocaleString('pt-BR')} <span>pontos</span></p><p>Onda {snapshot.wave.number} · {clock(snapshot.stats.timeAlive)} · {snapshot.stats.kills} abates</p><p>Recorde: {record.highScore.toLocaleString('pt-BR')} · Melhor onda: {record.bestWave}</p><button ref={primary} className="primary" onClick={begin}>Jogar novamente</button><button className="secondary" onClick={() => { setStarted(false); setPaused(false); }}>Voltar à seleção</button></>}
       </section></div>}

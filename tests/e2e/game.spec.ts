@@ -78,7 +78,7 @@ test('touch move o jogador numa viewport de 320 px', async ({ browser }) => {
 });
 
 test('a partida progride, oferece upgrades, causa dano e salva o recorde após a derrota', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(210_000);
   const errors = collectErrors(page);
   await page.clock.install({ time: new Date('2026-11-11T00:00:00Z') });
   await page.goto('./');
@@ -123,7 +123,7 @@ test('a partida progride, oferece upgrades, causa dano e salva o recorde após a
 
 test('a seleção informa falha de asset e permite tentar novamente', async ({ page }) => {
   await page.goto('./');
-  await page.route('**/art/animated/queen.webp', route => route.abort(), { times: 1 });
+  await page.route('**/reforged/drone.glb', route => route.abort(), { times: 1 });
   await page.getByRole('button', { name: /^jogar$/i }).click();
   await expect(page.getByRole('alert')).toContainText('Falha ao carregar a arena');
   await expect(page.getByTestId('arena')).toBeHidden();

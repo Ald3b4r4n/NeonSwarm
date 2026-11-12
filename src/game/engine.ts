@@ -1,4 +1,4 @@
-import { BIOMES, CHARACTERS, ENEMIES, RUN_SECONDS, bossPattern, encounterAt } from './rebirth-encounters.js';
+import { BIOMES, CHARACTERS, ENEMIES, EXTRACTION_DEADLINE, RUN_SECONDS, bossPattern, encounterAt } from './rebirth-encounters.js';
 import { WEAPONS, WEAPON_IDS, makeWeaponAttack, weaponEvolution } from './rebirth-weapons.js';
 /**
  * Motor puro do NEON SWARM.
@@ -866,7 +866,7 @@ function spawnRebirthEnemy(state: GameState, variant: EnemyVariant, scale: numbe
     id: state.nextId++, kind, variant, pos, vel: { x: 0, y: 0 }, radius: def.radius,
     hp: maxHp, maxHp, speed: def.speed,
     contactDamage: Math.round(def.contactDamage * (1 + (scale - 1) * .45)),
-    fireCooldown: 1.3 + random(state), xpValue: def.xpValue, hitFlash: 0,
+    fireCooldown: 1.3 + random(state), xpValue: def.xpValue, hitFlash: 0, spawnedAt: state.time,
   });
 }
 
@@ -875,12 +875,8 @@ function updateEncounter(state: GameState, dt: number): void {
   if (!run) return;
   state.wave.number = Math.min(12, Math.floor(state.time / 60) + 1);
   state.wave.elapsed = state.time % 60;
-  if (state.time >= RUN_SECONDS && run.bossDefeated) {
-    state.phase = 'victory';
-    state.score += 3000;
-    return;
-  }
-  if (state.time >= 900) {
+  if (finishBossEncounter(state)) return;
+  if (state.time >= EXTRACTION_DEADLINE) {
     state.phase = 'gameover';
     return;
   }
@@ -902,6 +898,13 @@ function updateEncounter(state: GameState, dt: number): void {
     if (state.time > 505) spawnRebirthEnemy(state, 'hound', encounter.scale);
   }
   state.wave.spawnTimer = encounter.cadence * (state.time < 110 ? .72 : 1) * (run.bossSpawned ? 1.8 : 1);
+}
+
+function finishBossEncounter(state: GameState): boolean {
+  if (!state.run?.bossDefeated) return false;
+  state.phase = 'victory';
+  state.score += 3000;
+  return true;
 }
 
 function updateQueen(state: GameState, enemy: Enemy, dt: number): void {
@@ -992,22 +995,25 @@ function updateArsenal(state: GameState, target: Enemy | null, dt: number): void
     const attack = makeWeaponAttack(id, Math.max(rank, evolution?.grantedRank ?? 1), aim, state.time);
     const range = attack.range * (evolution?.rangeMultiplier ?? 1);
     if (distanceSq(player.pos, target.pos) > range ** 2) continue;
-    const damage = (attack.damage + (player.stats.damage - 12) * .62) * (evolution?.damageMultiplier ?? 1);
+    const fanShare = attack.type === 'fan' ? Math.sqrt(3 / attack.angles.length) : 1;
+    const damage = (attack.damage + (player.stats.damage - 12) * .62 * fanShare) * (evolution?.damageMultiplier ?? 1);
     run.cooldowns[id] = attack.cooldown * (2.4 / player.stats.fireRate) * (evolution?.cooldownMultiplier ?? 1);
     switch (attack.type) {
       case 'single':
       case 'fan':
       case 'pierce': {
         const angles = attack.type === 'fan' ? [...attack.angles] : Array.from({ length: attack.projectiles }, (_, i) => aim + i * .075);
+        const baseCount = angles.length;
         const extra = player.stats.projectiles - 1;
         for (let i = 0; i < extra; i++) angles.push(aim + (i % 2 ? -1 : 1) * (.15 + Math.floor(i / 2) * .1));
-        for (const angle of angles) {
+        for (const [index, angle] of angles.entries()) {
           if (state.projectiles.length >= MAX_PROJECTILES) break;
           const speed = attack.projectileSpeed;
           state.projectiles.push({
             id: state.nextId++, owner: 'player', weapon: id, rank: attack.rank, pos: { ...player.pos },
             vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
-            radius: attack.type === 'pierce' ? attack.beamWidth : 4, damage,
+            radius: attack.type === 'pierce' ? attack.beamWidth : 4,
+            damage: attack.type === 'fan' && index >= baseCount ? damage * .62 : damage,
             pierceLeft: attack.pierce + (id === 'coil' ? Math.floor(attack.rank / 3) : 0) + player.stats.pierce + (evolution?.effect.kind === 'pierceBonus' ? evolution.effect.extraPierce : 0),
             ttl: range / speed, hitIds: [],
           });
@@ -1094,6 +1100,7 @@ function simulate(state: GameState, move: Vec2, pulse: boolean, dt: number): voi
   }
 
   updateProjectiles(state, dt);
+  if (state.phase === 'playing' && finishBossEncounter(state)) return;
   if (state.phase !== 'playing') return;
 
   updateOrbs(state, dt);

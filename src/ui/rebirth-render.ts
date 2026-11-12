@@ -47,19 +47,19 @@ function streak(ctx: CanvasRenderingContext2D, x: number, y: number, dx: number,
     ctx.moveTo(x - dx * .5 + px * 3, y - dy * .5 + py * 3);
   }
   ctx.lineTo(x, y);
-  if (!reduced && rank >= 3) {
+  if (rank >= 3) {
     ctx.moveTo(x - dx * .72, y - dy * .72);
     ctx.lineTo(x - dx * .35 - px * 8, y - dy * .35 - py * 8);
     if (rank >= 4) {
       ctx.moveTo(x, y);
-      ctx.lineTo(x - dx * .55 + px * 10, y - dy * .55 + py * 10);
+      ctx.lineTo(x - dx * .55 + px * (reduced ? 6 : 10), y - dy * .55 + py * (reduced ? 6 : 10));
     }
   }
   ctx.stroke();
   if (rank === 5) halo(ctx, { x, y }, type === 'scatter' ? 4 : 6, '#efffff', 1.3);
 }
 
-export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art: ArenaArt, reduced: boolean) {
+export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art: ArenaArt, reduced: boolean, deathProgress = 1) {
   const { run, player } = state;
   if (!run) return;
   const time = reduced ? 0 : state.time;
@@ -99,20 +99,25 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
         ctx.moveTo(enemy.pos.x, enemy.pos.y);
         ctx.lineTo(player.pos.x, player.pos.y);
         ctx.stroke();
+      } else if (warning) {
+        ctx.setLineDash([5, 7]);
+        halo(ctx, enemy.pos, enemy.radius + 34, '#ffc491', 2);
+        ctx.setLineDash([]);
       }
     }
     const pattern = kind === 'queen' ? bossPattern(state.time, enemy.hp / enemy.maxHp) : undefined;
-    const arrival = pattern && state.time >= 660 && state.time < 661;
+    const age = state.time - (enemy.spawnedAt ?? state.time - 2);
+    const arrival = pattern && age < 1;
     const warning = pattern && enemy.fireCooldown < pattern.telegraphTime;
     const firing = (enemy.attackUntil ?? 0) > state.time;
     const row = arrival ? 6 : enemy.hitFlash > 0 ? 3 : warning ? 7
       : firing ? pattern && pattern.telegraph !== 'line' ? 5 : 2 : Math.hypot(enemy.vel.x, enemy.vel.y) > 10 ? 1 : 0;
     sprite(ctx, art.animation[kind], enemy.pos, enemy.radius * (kind === 'queen' ? 4.7 : 4.2),
-      time + enemy.id * .077, enemy.vel, row, arrival ? state.time - 660 : undefined);
+      state.time + enemy.id * .077, enemy.vel, row, arrival ? age : undefined);
   }
 
   if (run.ranks.orbit) {
-    const orbit = makeWeaponAttack('orbit', run.ranks.orbit, 0, time);
+    const orbit = makeWeaponAttack('orbit', run.ranks.orbit, 0, state.time);
     if (orbit.type === 'rotating') {
       halo(ctx, player.pos, orbit.orbitRadius, '#83ffc544', 1);
       for (const angle of orbit.orbAngles) {
@@ -132,9 +137,9 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   const attacking = state.projectiles.some(shot => shot.owner === 'player' &&
     Math.abs(shot.pos.x - player.pos.x) + Math.abs(shot.pos.y - player.pos.y) < 38);
   const motion = Math.hypot(run.move.x, run.move.y);
-  const playerRow = state.phase === 'gameover' ? 4 : player.invuln > .62 ? 3 : casting ? 5 : attacking ? 2 : motion > 8 ? 1 : 0;
-  sprite(ctx, art.animation[run.character], player.pos, 83, time, motion > 8 ? run.move : { x: player.aim.x * 40, y: 0 },
-    playerRow, playerRow === 4 ? .99 : undefined);
+  const playerRow = state.phase === 'gameover' ? 4 : player.invuln > .62 && player.invuln < 2 ? 3 : casting ? 5 : attacking ? 2 : motion > 8 ? 1 : 0;
+  sprite(ctx, art.animation[run.character], player.pos, 96, state.time, motion > 8 ? run.move : { x: player.aim.x * 40, y: 0 },
+    playerRow, playerRow === 4 ? deathProgress : undefined);
   for (const bolt of state.projectiles) {
     const color = bolt.owner === 'enemy' ? '#ff82a6' : weaponColors[bolt.weapon ?? 'coil'];
     streak(ctx, bolt.pos.x, bolt.pos.y, bolt.vel.x * .026, bolt.vel.y * .026,
@@ -142,7 +147,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   }
   for (const impact of state.impacts) {
     const progress = 1 - impact.ttl / impact.maxTtl;
-    if (reduced && impact.kind !== 'blast' && impact.kind !== 'pulse' && impact.kind !== 'arc') continue;
+    if (reduced && impact.kind !== 'kill' && impact.kind !== 'blast' && impact.kind !== 'pulse' && impact.kind !== 'arc') continue;
     ctx.globalAlpha = Math.max(0, 1 - progress);
     const rank = impact.rank ?? 1;
     if (impact.kind === 'kill' && impact.variant) {

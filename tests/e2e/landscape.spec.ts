@@ -30,6 +30,7 @@ test('mobile landscape keeps a tall 4:3 arena and compact touch HUD at target si
         return { arenaHeight: arena.height, canvasWidth: canvas.width, canvasHeight: canvas.height, viewportHeight: innerHeight, viewportWidth: innerWidth, pageWidth: document.documentElement.scrollWidth };
       });
       expect(dimensions.arenaHeight).toBeGreaterThanOrEqual(dimensions.viewportHeight * .75);
+      expect(dimensions.canvasHeight).toBeGreaterThanOrEqual(dimensions.viewportHeight * .75);
       expect(dimensions.canvasWidth / dimensions.canvasHeight).toBeCloseTo(4 / 3, 1);
       expect(dimensions.pageWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
       await expect(page.getByTestId('virtual-controls')).toBeVisible();
@@ -48,7 +49,13 @@ test('mobile landscape keeps a tall 4:3 arena and compact touch HUD at target si
     await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 0 }] });
     await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + bounds.width * .4, y, id: 0 }] });
     await page.clock.runFor(650);
-    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    const beforeSecondFinger = Number(await page.locator('#arena').getAttribute('data-player-x'));
+  const right = x + bounds.width * .4;
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: right, y, id: 0 }, { x: 450, y: 204, id: 1 }] });
+  await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: right, y, id: 0 }, { x: 390, y: 204, id: 1 }] });
+  await page.clock.runFor(240);
+  expect(Number(await page.locator('#arena').getAttribute('data-player-x'))).toBeGreaterThan(beforeSecondFinger + 12);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     expect(Number(await page.locator('#arena').getAttribute('data-player-x'))).toBeGreaterThan(initial + 12);
 
     await page.locator('.touch-actions button[aria-label="Pulso"]').tap();

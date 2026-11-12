@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import {
   BIOMES,
   CHARACTERS,
@@ -24,7 +24,7 @@ const ENEMY_CHOICES = [
   { id: 'queen', label: 'Rainha' },
 ] as const;
 
-/** Props documentadas para futura integração do painel com o App. */
+/** Contrato entre o painel e a partida local. */
 export interface DeveloperPanelProps {
   /** Estado imutável atual da partida exibido pelos controles. */
   state: GameState;
@@ -32,21 +32,20 @@ export interface DeveloperPanelProps {
   onAction: (action: DeveloperAction) => void;
   /** Fecha o painel; o App decide se o desmonta ou apenas o oculta. */
   onClose: () => void;
-  /** Libera o painel quando a camada App já autenticou o operador. */
-  unlocked: boolean;
-  /** Notifica o App quando a senha local correta for informada. */
-  onUnlock: () => void;
+  unlocked?: boolean;
+  session: { speed: number; fps: boolean; limit: 0 | 30 | 60 | 120 };
 }
 
-/** Painel de desenvolvimento local, ainda sem acoplamento ao App ou à engine. */
+/** Painel local de desenvolvimento. */
 export function DeveloperPanel({
   state,
   onAction,
   onClose,
-  unlocked,
-  onUnlock,
+  unlocked = false,
+  session,
 }: DeveloperPanelProps) {
   const id = useId();
+  const dialog = useRef<HTMLElement>(null);
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
@@ -56,12 +55,33 @@ export function DeveloperPanel({
     (WEAPON_IDS.find((weapon) => (state.run?.ranks[weapon] ?? 0) > 0) ?? 'coil'),
   );
   const [rankWeapon, setRankWeapon] = useState<WeaponId>(startingWeapon);
-  const [simSpeed, setSimSpeed] = useState(1);
-  const [frozen, setFrozen] = useState(false);
-  const [fpsVisible, setFpsVisible] = useState(false);
-  const [fpsLimit, setFpsLimit] = useState<0 | 30 | 60 | 120>(0);
+  const [simSpeed, setSimSpeed] = useState(session.speed);
+  const [frozen, setFrozen] = useState(state.run?.freezeEnemies ?? false);
+  const [fpsVisible, setFpsVisible] = useState(session.fps);
+  const [fpsLimit, setFpsLimit] = useState(session.limit);
   const [waveText, setWaveText] = useState(String(state.wave.number));
   const isUnlocked = unlocked || locallyUnlocked;
+
+  useEffect(() => {
+    const node = dialog.current;
+    if (!node) return;
+    const focusable = () => [...node.querySelectorAll<HTMLElement>('input:not(:disabled), select:not(:disabled), button:not(:disabled)')];
+    const restore = document.activeElement as HTMLElement | null;
+    (node.querySelector<HTMLElement>('input[type="password"]') ?? focusable()[0])?.focus();
+    const loopFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const controls = focusable();
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!first || !last) return;
+      const current = document.activeElement;
+      if (!node.contains(current) || (event.shiftKey ? current === first : current === last)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
+    };
+    document.addEventListener('keydown', loopFocus);
+    return () => { document.removeEventListener('keydown', loopFocus); restore?.focus(); };
+  }, [isUnlocked]);
 
   function handleUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +93,6 @@ export function DeveloperPanel({
     setPassword('');
     setPasswordError(false);
     setLocallyUnlocked(true);
-    onUnlock();
   }
 
   function chooseCharacter(value: string) {
@@ -100,6 +119,7 @@ export function DeveloperPanel({
       }}>
         <section
           className="developer-panel developer-panel--locked"
+          ref={dialog}
           role="dialog"
           aria-modal="true"
           aria-labelledby={`${id}-title`}
@@ -144,6 +164,7 @@ export function DeveloperPanel({
     }}>
       <section
         className="developer-panel"
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
@@ -303,7 +324,7 @@ export function DeveloperPanel({
               </select>
             </label>
             <label className="developer-toggle">
-              <span><strong>Congelar simulação</strong><small>Solicita pausa ao App</small></span>
+              <span><strong>Congelar inimigos</strong><small>Pausa inimigos e projéteis hostis</small></span>
               <input
                 type="checkbox"
                 checked={frozen}
@@ -379,7 +400,7 @@ export function DeveloperPanel({
         </div>
 
         <footer className="developer-footer">
-          <span>Controles locais • ações de sessão encaminhadas ao App</span>
+          <span>Partidas de teste ficam fora do recorde</span>
           <button type="button" onClick={closePanel}>Fechar painel</button>
         </footer>
       </section>

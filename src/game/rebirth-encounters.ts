@@ -6,6 +6,7 @@
  */
 
 export const RUN_SECONDS = 720;
+export const EXTRACTION_DEADLINE = 900;
 
 export type RebirthEnemyKind =
   | 'drone'

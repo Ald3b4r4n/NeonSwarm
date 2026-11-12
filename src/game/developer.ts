@@ -141,6 +141,7 @@ function spawnEnemy(state: GameState, variant: EnemyVariant): GameState {
     fireCooldown: 1.3,
     xpValue: definition.xpValue,
     hitFlash: 0,
+    spawnedAt: state.time,
   };
 
   const enemies = variant === 'queen' && state.enemies.length >= MAX_ENEMIES

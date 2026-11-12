@@ -16,6 +16,7 @@ type LaunchScreenProps = {
   onCharacter: (id: string) => void;
   onBiome: (id: string) => void;
   onPlay: () => void;
+  loading?: boolean;
   record: number;
   onLogoTap?: () => void;
 };
@@ -65,6 +66,7 @@ export function LaunchScreen({
   onCharacter,
   onBiome,
   onPlay,
+  loading,
   record,
   onLogoTap,
 }: LaunchScreenProps) {
@@ -103,8 +105,8 @@ export function LaunchScreen({
             <ChoiceCards group="Biomas" items={biomes} selected={biome} onSelect={onBiome} />
           </section>
 
-          <button type="button" className="rebirth-play" onClick={onPlay}>
-            JOGAR
+          <button type="button" className="rebirth-play" onClick={onPlay} disabled={loading} aria-busy={loading}>
+            {loading ? 'CARREGANDO…' : 'JOGAR'}
           </button>
         </div>
       </div>

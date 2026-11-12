@@ -77,7 +77,7 @@ describe('Rebirth: partida integrada', () => {
     const queen = boss.enemies.find(enemy => enemy.variant === 'queen');
     expect(queen).toBeDefined();
     expect(boss.run!.bossSpawned).toBe(true);
-    boss.time = RUN_SECONDS;
+    boss.time = RUN_SECONDS - 48;
     expect(stepGame(boss, idle, 1 / 60).phase).toBe('playing');
     queen!.hp = 1;
     queen!.pos = { x: 520, y: 360 };

@@ -7,7 +7,8 @@ import { ARENA_HEIGHT, ARENA_WIDTH, type GameState, type UpgradeId, type Charact
 import { drawRebirth } from './rebirth-render.js';
 import { artUrl, loadArenaArt, type ArenaArt } from './rebirth-art.js';
 import { LaunchScreen } from './rebirth-shell.js';
-import { WEAPONS } from '../game/rebirth-weapons.js';
+import { EXTRACTION_DEADLINE, RUN_SECONDS } from '../game/rebirth-encounters.js';
+import { WEAPONS, WEAPON_IDS } from '../game/rebirth-weapons.js';
 import { readMotion, readRecord, saveMotion, saveRecord } from './storage.js';
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
@@ -31,7 +32,7 @@ export function App() {
   const [fpsShown, setFpsShown] = useState(false);
   const [fps, setFps] = useState(0);
   const testRun = useRef(false);
-  const developer = useRef({ open: false, speed: 1, fps: false, limit: 0 });
+  const developer = useRef({ open: false, speed: 1, fps: false, limit: 0 as 0 | 30 | 60 | 120 });
   const selected = useRef<{ character: CharacterId; biome: BiomeId; weapon?: WeaponId }>({ character: 'vesper', biome: 'station' });
   const taps = useRef({ at: 0, count: 0 });
   const [portraitTouch, setPortraitTouch] = useState(false);
@@ -53,8 +54,8 @@ export function App() {
   const pointer = useRef<{ id: number; x: number; y: number } | null>(null);
   const joystickPointer = useRef<{ id: number; centerX: number; centerY: number; radius: number } | null>(null);
   const pulse = useRef(false);
-  const controls = useRef({ started, paused, reduced, quality });
-  controls.current = { started, paused, reduced, quality };
+  const controls = useRef({ started, paused, reduced, quality, portraitBlocked: false });
+  controls.current = { started, paused, reduced, quality, portraitBlocked: portraitTouch && !portraitDismissed };
   const clearInput = () => {
     keys.current.clear();
     stick.current = { x: 0, y: 0 };
@@ -67,10 +68,6 @@ export function App() {
   function choose(id: UpgradeId) { game.current = applyUpgrade(game.current, id); clearInput(); publish(); field.current?.focus(); }
   async function begin(options?: { test: true; action?: DeveloperStateAction; frozen?: boolean }) {
     if (loadingRef.current) return;
-    if (window.matchMedia('(pointer: coarse)').matches) {
-      const orientation = screen.orientation as ScreenOrientation & { lock?: (value: 'landscape') => Promise<void> };
-      void orientation?.lock?.('landscape').catch(() => undefined);
-    }
     loadingRef.current = true;
     setLoading(true);
     setLoadError(false);
@@ -94,7 +91,6 @@ export function App() {
       }
       clearInput();
       setPaused(Boolean(options));
-      setPortraitDismissed(false);
       setStarted(true);
       publish();
       requestAnimationFrame(() => field.current?.focus());
@@ -105,6 +101,14 @@ export function App() {
       setLoading(false);
     }
   }
+  async function tryLandscape() {
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      const orientation = screen.orientation as ScreenOrientation & { lock?: (value: 'landscape') => Promise<void> };
+      await orientation?.lock?.('landscape');
+    } catch { /* Rotation and portrait controls remain available. */ }
+  }
+
   function openDeveloper() {
     const current = controls.current;
     if (current.started && !current.paused && game.current.phase === 'playing') return;
@@ -135,8 +139,10 @@ export function App() {
       void begin();
       return;
     }
-    testRun.current = true;
-    setTestMode(true);
+    if (action.type !== 'session/set-fps-visible' && action.type !== 'session/set-fps-limit') {
+      testRun.current = true;
+      setTestMode(true);
+    }
     switch (action.type) {
       case 'session/set-sim-speed':
         developer.current.speed = Math.max(.25, Math.min(4, action.speed));
@@ -184,7 +190,6 @@ export function App() {
     const updateOrientation = () => {
       const portrait = window.matchMedia('(orientation: portrait)').matches;
       setPortraitTouch(coarsePointer.matches && portrait);
-      if (!portrait) setPortraitDismissed(false);
     };
     updateOrientation();
     window.addEventListener('resize', updateOrientation);
@@ -212,18 +217,18 @@ export function App() {
     };
     const observer = new ResizeObserver(resize); observer.observe(node); resize();
     let frame = 0, previous = 0, accumulator = 0, lastHud = 0, lastDraw = 0;
-    let sampleStart = 0, sampleFrames = 0, slowSamples = 0;
+    let sampleStart = 0, sampleFrames = 0, slowSamples = 0, deathAt = 0;
     const ctx = node.getContext('2d', { alpha: false });
     const tick = (now: number) => {
       const current = controls.current;
-      if (current.started && !current.paused && !developer.current.open) {
+      if (current.started && !current.paused && !current.portraitBlocked && !developer.current.open && game.current.phase === 'playing') {
         if (!sampleStart) sampleStart = now;
         sampleFrames++;
         if (now - sampleStart >= 900) {
           const measured = Math.round(1000 * sampleFrames / (now - sampleStart));
           if (developer.current.fps) setFps(measured);
           slowSamples = measured < 46 ? slowSamples + 1 : 0;
-          if (slowSamples >= 2) automatic = 'low';
+          if (slowSamples >= 2 && current.quality === 'auto') automatic = 'low';
           sampleStart = now;
           sampleFrames = 0;
         }
@@ -231,7 +236,7 @@ export function App() {
       if (applied !== (current.quality === 'auto' ? automatic : current.quality)) resize();
       const dt = previous ? Math.min((now - previous) / 1000, .05) : 0; previous = now;
       const before = game.current.phase;
-      if (current.started && !current.paused && !developer.current.open && before === 'playing') {
+      if (current.started && !current.paused && !current.portraitBlocked && !developer.current.open && before === 'playing') {
         accumulator = Math.min(.22, accumulator + dt * developer.current.speed);
         while (accumulator >= 1 / 60 && game.current.phase === 'playing') {
           const pressed = keys.current;
@@ -242,8 +247,9 @@ export function App() {
         }
       } else accumulator = 0;
       if (before !== game.current.phase || now - lastHud >= 100) { setSnapshot(game.current); lastHud = now; }
+      if (game.current.phase === 'gameover') deathAt ||= now; else deathAt = 0;
       if (ctx && art.current && current.started && (!developer.current.limit || now - lastDraw >= 1000 / developer.current.limit - 1)) {
-        drawRebirth(ctx, game.current, art.current, current.reduced || !QUALITY_PRESETS[applied ?? 'medium'].effects);
+        drawRebirth(ctx, game.current, art.current, current.reduced || !QUALITY_PRESETS[applied ?? 'medium'].effects, deathAt ? Math.min(1, (now - deathAt) / 540) : 0);
         lastDraw = now;
       }
       frame = requestAnimationFrame(tick);
@@ -293,9 +299,9 @@ export function App() {
   }, [snapshot.phase, snapshot.score, snapshot.wave.number, started]);
   useEffect(() => { if (paused || snapshot.phase !== 'playing') { clearInput(); primary.current?.focus(); } }, [paused, snapshot.phase]);
 
-  const active = started && !paused && !developerOpen && snapshot.phase === 'playing';
+  const active = started && !paused && !controls.current.portraitBlocked && !developerOpen && snapshot.phase === 'playing';
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (!active || pointer.current || event.button !== 0) return;
+    if (!active || joystickPointer.current || pointer.current || event.button !== 0) return;
     event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId);
     pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
   }
@@ -309,6 +315,7 @@ export function App() {
     if (!active || joystickPointer.current || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
+    pointer.current = null;
     const bounds = event.currentTarget.getBoundingClientRect();
     const radius = bounds.width * .32;
     joystickPointer.current = { id: event.pointerId, centerX: bounds.left + bounds.width / 2, centerY: bounds.top + bounds.height / 2, radius };
@@ -347,7 +354,7 @@ export function App() {
     {!started && <LaunchScreen cover={artUrl('cover')} characters={characters} biomes={biomes}
       character={character} biome={biome} record={record.highScore}
       onCharacter={id => { if (id === 'vesper' || id === 'rook') setCharacter(id); }}
-      onBiome={id => { if (id === 'station' || id === 'nursery') setBiome(id); }} onPlay={() => { void begin(); }} onLogoTap={logoTap} />}
+      onBiome={id => { if (id === 'station' || id === 'nursery') setBiome(id); }} onPlay={() => { void begin(); }} onLogoTap={logoTap} loading={loading} />}
     {!started && qualitySelect}
     {loading && <p className="load-state" role="status">Carregando ilustrações da arena…</p>}
     {loadError && <p className="load-state" role="alert">Falha ao carregar a arena. Tente jogar novamente.</p>}
@@ -357,8 +364,8 @@ export function App() {
       <div className="vitals"><span>VIDA <strong data-testid="health">{Math.ceil(p.hp)} / {p.maxHp}</strong></span><meter aria-label="Vida" min={0} max={p.maxHp} value={p.hp} /><span>ENERGIA <strong>{Math.floor(p.energy)} / {p.maxEnergy}</strong></span><meter className="energy" aria-label="Energia" min={0} max={p.maxEnergy} value={p.energy} /></div>
       <div className="metric"><span>NÍVEL</span><strong data-testid="level">{p.level.toString().padStart(2, '0')}</strong><meter aria-label="Experiência até o próximo nível" max={p.xpToNext} value={Math.min(p.xp, p.xpToNext)} /></div>
       <div className="metric"><span>ONDA</span><strong data-testid="wave">{snapshot.wave.number.toString().padStart(2, '0')}</strong></div>
-      <div className="metric"><span>TEMPO</span><strong data-testid="time">{clock(snapshot.stats.timeAlive)}</strong></div>
-      <div className="metric"><span>INIMIGOS</span><strong>{snapshot.enemies.length}</strong></div>
+      <div className="metric"><span>{snapshot.time >= RUN_SECONDS - 60 ? "EXTRAÇÃO EM" : "TEMPO"}</span><strong data-testid="time">{snapshot.time >= RUN_SECONDS - 60 ? clock(Math.max(0, Math.ceil(EXTRACTION_DEADLINE - snapshot.time))) : clock(snapshot.stats.timeAlive)}</strong></div>
+      <div className="metric"><span>INIMIGOS</span><strong data-testid="enemy-count">{snapshot.enemies.length}</strong></div>
       <div className="metric record"><span>RECORDE</span><strong data-testid="record">{record.highScore.toLocaleString('pt-BR')}</strong></div>
     </section>
     <section className="arsenal" aria-label="Arsenal">
@@ -383,10 +390,14 @@ export function App() {
       {started && portraitTouch && !portraitDismissed && <aside className="portrait-prompt" role="status">
         <p className="eyebrow">MELHOR EM LANDSCAPE</p>
         <p>Gire o aparelho para ver mais da arena.</p>
+        {document.fullscreenEnabled && <button type="button" onClick={() => { void tryLandscape(); }}>Tentar tela cheia</button>}
         <button type="button" onClick={() => setPortraitDismissed(true)}>Seguir no retrato</button>
       </aside>}
-      {(paused || snapshot.phase !== 'playing') && <div className="overlay" onPointerDown={event => event.stopPropagation()}><section className="dialog" aria-label={paused ? 'Jogo pausado' : snapshot.phase === 'upgrade' ? 'Escolha uma melhoria' : 'Fim de partida'}>
-        {paused ? <><p className="eyebrow">SISTEMA EM ESPERA</p><h2>Pausado</h2><p>Respire. A arena espera por você.</p>{qualitySelect}<button ref={primary} className="primary" onClick={resume}>Retomar</button></> : snapshot.phase === 'upgrade' ? <><p className="eyebrow">NÍVEL {p.level}</p><h2>Escolha sua evolução</h2><p>Selecione uma melhoria para continuar.</p><div className="upgrades">{snapshot.upgradeOptions.map((option, index) => <button ref={index === 0 ? primary : undefined} key={option.id} onClick={() => choose(option.id)}><span className="eyebrow">{index + 1} · NÍVEL {option.nextLevel}</span><strong>{option.title}</strong><span>{option.description}</span></button>)}</div></> : <><p className="eyebrow">SINAL ENCERRADO</p><h2>{snapshot.phase === 'victory' ? 'Setor recuperado' : 'Fim de jogo'}</h2><p className="score">{snapshot.score.toLocaleString('pt-BR')} <span>pontos</span></p><p>Onda {snapshot.wave.number} · {clock(snapshot.stats.timeAlive)} · {snapshot.stats.kills} abates</p><p>Recorde: {record.highScore.toLocaleString('pt-BR')} · Melhor onda: {record.bestWave}</p><button ref={primary} className="primary" onClick={() => { void begin(); }}>Jogar novamente</button><button className="secondary" onClick={() => { setStarted(false); setPaused(false); }}>Voltar à seleção</button></>}
+      {(paused || snapshot.phase !== 'playing') && <div className="overlay" onPointerDown={event => event.stopPropagation()}><section className="dialog" role="dialog" aria-modal="true" aria-label={paused ? 'Jogo pausado' : snapshot.phase === 'upgrade' ? 'Escolha uma melhoria' : 'Fim de partida'}>
+        {paused ? <><p className="eyebrow">SISTEMA EM ESPERA</p><h2>Pausado</h2><p>Respire. A arena espera por você.</p>{qualitySelect}<button ref={primary} className="primary" onClick={resume}>Retomar</button></> : snapshot.phase === 'upgrade' ? <><p className="eyebrow">NÍVEL {p.level}</p><h2>Escolha sua evolução</h2><p>Selecione uma melhoria para continuar.</p><div className="upgrades">{snapshot.upgradeOptions.map((option, index) => <button ref={index === 0 ? primary : undefined} key={option.id} onClick={() => choose(option.id)}><span className="eyebrow">{index + 1} · NÍVEL {option.nextLevel}</span><strong>{option.title}</strong><span>{option.description}</span>{WEAPON_IDS.filter(id => option.id === `weapon-${id}`).map(id => {
+          const stats = WEAPONS[id].stats(option.nextLevel);
+          return <small key={id} className="upgrade-preview">{stats.damage} de dano · {stats.cooldown.toFixed(2).replace('.', ',')} s</small>;
+        })}</button>)}</div></> : <><p className="eyebrow">SINAL ENCERRADO</p><h2>{snapshot.phase === 'victory' ? 'Setor recuperado' : 'Fim de jogo'}</h2><p>{snapshot.phase === "gameover" && snapshot.time >= EXTRACTION_DEADLINE ? "A janela de extração se fechou antes da derrota da Rainha." : null}</p><p className="score">{snapshot.score.toLocaleString('pt-BR')} <span>pontos</span></p><p>Onda {snapshot.wave.number} · {clock(snapshot.stats.timeAlive)} · {snapshot.stats.kills} abates</p><p>Recorde: {record.highScore.toLocaleString('pt-BR')} · Melhor onda: {record.bestWave}</p><button ref={primary} className="primary" onClick={() => { void begin(); }}>Jogar novamente</button><button className="secondary" onClick={() => { setStarted(false); setPaused(false); }}>Voltar à seleção</button></>}
       </section></div>}
     </div>
     <footer className="toolbar"><div><span className="status-dot" />{paused ? 'PAUSADO' : snapshot.phase === 'upgrade' ? 'EVOLUÇÃO DISPONÍVEL' : snapshot.phase === 'gameover' ? 'PARTIDA ENCERRADA' : `PONTOS ${snapshot.score.toLocaleString('pt-BR')}`}</div><div className="actions"><button disabled={!active} onClick={() => { pulse.current = true; field.current?.focus(); }}>Pulso <kbd>Espaço</kbd></button><button aria-label={paused ? 'Retomar' : 'Pausar'} disabled={!started || snapshot.phase !== 'playing'} onClick={() => { clearInput(); if (paused) resume(); else setPaused(true); }}>{paused ? 'Retomar' : 'Pausar'} <kbd>P</kbd></button></div></footer>
@@ -394,6 +405,6 @@ export function App() {
     </div>
     {fpsShown && <output className="performance-display" aria-label="Desempenho">{fps} FPS</output>}
     {developerOpen && <DeveloperPanel state={snapshot} onAction={handleDeveloperAction} onClose={closeDeveloper}
-      unlocked={false} onUnlock={() => {}} />}
+      session={developer.current} /> }
   </main>;
 }

@@ -141,7 +141,7 @@ describe('DeveloperPanel', () => {
       onAction: vi.fn(),
       onClose: vi.fn(),
       unlocked: false,
-      onUnlock: vi.fn(),
+      session: { speed: 1, fps: false, limit: 0 },
     }));
 
     expect(html).toContain('Acesso do operador');
@@ -156,7 +156,7 @@ describe('DeveloperPanel', () => {
       onAction: vi.fn(),
       onClose: vi.fn(),
       unlocked: true,
-      onUnlock: vi.fn(),
+      session: { speed: 1, fps: false, limit: 0 },
     }));
     const sessionContract: DeveloperSessionAction = { type: 'session/restart' };
 

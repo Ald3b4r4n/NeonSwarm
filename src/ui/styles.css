@@ -171,3 +171,6 @@
 .quality-select { display: flex; gap: .6rem; align-items: center; justify-content: center; padding: .4rem; color: var(--muted, #a4aaca); font-size: .85rem; }
 .quality-select select { color: #ecf8ff; background: #101728; border: 1px solid #425174; border-radius: .4rem; padding: .4rem; }
 .performance-display { position: fixed; z-index: 7; bottom: max(8px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); pointer-events: none; padding: .25rem .5rem; border-radius: .35rem; background: #070c17e6; color: #9cfff2; font: 700 .7rem monospace; }
+
+.upgrade-preview { color: #91e5f5; font-variant-numeric: tabular-nums; }
+.portrait-prompt button + button { margin-left: .45rem; }

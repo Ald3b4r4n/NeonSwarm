@@ -58,6 +58,7 @@ test('touch move o jogador numa viewport de 320 px', async ({ browser }) => {
     await page.getByRole('button', { name: /^jogar$/i }).tap();
     const arena = page.getByTestId('arena');
     await expect(arena).toBeVisible();
+    await page.getByRole('button', { name: 'Seguir no retrato' }).tap();
     const box = await arena.boundingBox();
     if (!box) throw new Error('Arena móvel não visível.');
     const initial = await playerX(page);

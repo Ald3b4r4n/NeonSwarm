@@ -1,3 +1,5 @@
+import { BIOMES, CHARACTERS, ENEMIES, RUN_SECONDS, bossPattern, encounterAt } from './rebirth-encounters.js';
+import { WEAPONS, WEAPON_IDS, makeWeaponAttack, weaponEvolution } from './rebirth-weapons.js';
 /**
  * Motor puro do NEON SWARM.
  *
@@ -15,6 +17,9 @@ import {
   type Enemy,
   type EnemyKind,
   type GameState,
+  type RunConfig,
+  type WeaponId,
+  type EnemyVariant,
   type Impact,
   type InputState,
   type PlayerStats,
@@ -87,7 +92,8 @@ const ENEMY_TEMPLATES: Record<EnemyKind, EnemyTemplate> = {
 };
 
 /** Opções de upgrade: texto em português já pronto para a UI. */
-const UPGRADE_CATALOG: Record<UpgradeId, { title: string; description: string }> = {
+type CoreUpgrade = Exclude<UpgradeId, `weapon-${WeaponId}`>;
+const UPGRADE_CATALOG: Record<CoreUpgrade, { title: string; description: string }> = {
   damage: { title: 'Dano +5', description: 'Cada projétil causa mais dano.' },
   fireRate: { title: 'Cadência +0,35/s', description: 'Dispara mais vezes por segundo.' },
   speed: { title: 'Velocidade +18', description: 'O jogador se move mais rápido.' },
@@ -98,7 +104,7 @@ const UPGRADE_CATALOG: Record<UpgradeId, { title: string; description: string }>
   regen: { title: 'Regeneração +0,6/s', description: 'Recupera vida continuamente.' },
 };
 
-const UPGRADE_IDS: UpgradeId[] = [
+const UPGRADE_IDS: CoreUpgrade[] = [
   'damage',
   'fireRate',
   'speed',
@@ -181,6 +187,12 @@ function cloneState(state: GameState): GameState {
     score: state.score,
     upgradeOptions: state.upgradeOptions.map((option) => ({ ...option })),
     nextId: state.nextId,
+    ...(state.run && { run: {
+      ...state.run,
+      ranks: { ...state.run.ranks },
+      cooldowns: { ...state.run.cooldowns },
+      mines: state.run.mines.map(mine => ({ ...mine })),
+    } }),
   };
 }
 
@@ -337,10 +349,11 @@ function killEnemyAt(state: GameState, index: number): void {
   if (!enemy) return;
 
   state.enemies.splice(index, 1);
+  if (state.run && enemy.variant === 'queen') state.run.bossDefeated = true;
   state.stats.kills += 1;
   state.stats.killsByKind[enemy.kind] += 1;
   state.score += scoreForKill(enemy.kind, state.wave.number);
-  dropOrb(state, enemy.pos, enemy.xpValue);
+  dropOrb(state, enemy.pos, enemy.xpValue * (state.run ? 2 : 1));
   addImpact(state, 'kill', enemy.pos, enemy.kind);
 }
 
@@ -384,7 +397,7 @@ function hurtPlayer(state: GameState, amount: number): void {
 }
 
 /** True somente se comprar o próximo nível ainda altera algum efeito do jogador. */
-function upgradeCanImprove(state: GameState, id: UpgradeId): boolean {
+function upgradeCanImprove(state: GameState, id: CoreUpgrade): boolean {
   const player = state.player;
   const level = player.upgrades[id] ?? 0;
   if (level >= UPGRADE_MAX_LEVEL) return false;
@@ -412,24 +425,28 @@ function upgradeCanImprove(state: GameState, id: UpgradeId): boolean {
 }
 
 function buildUpgradeOptions(state: GameState): UpgradeOption[] {
-  // Não usa fallback para upgrades esgotados: uma escolha sem efeito apenas
-  // consome o nível e trava a progressão real do jogador.
-  const pool = UPGRADE_IDS.filter((id) => upgradeCanImprove(state, id));
-
-  // Sorteio sem repetição, preservando determinismo.
+  const pool: UpgradeOption[] = UPGRADE_IDS.filter(id => upgradeCanImprove(state, id))
+    .map(id => ({ id, ...UPGRADE_CATALOG[id], nextLevel: (state.player.upgrades[id] ?? 0) + 1 }));
+  if (state.run) {
+    const ranks = state.run.ranks;
+    for (const id of WEAPON_IDS) {
+      const rank = ranks[id] ?? 0;
+      const weapon = WEAPONS[id];
+      if (rank >= weapon.maxRank) continue;
+      const evolution = weaponEvolution(id, { ...ranks, [id]: rank + 1 });
+      pool.push({
+        id: "weapon-" + id as UpgradeId,
+        title: evolution?.title ?? weapon.title,
+        description: rank ? evolution?.description ?? 'Reforce o dano e o alcance desta arma.' : weapon.description,
+        nextLevel: rank + 1,
+      });
+    }
+  }
   for (let i = pool.length - 1; i > 0; i -= 1) {
     const j = Math.floor(random(state) * (i + 1));
-    const tmp = pool[i] as UpgradeId;
-    pool[i] = pool[j] as UpgradeId;
-    pool[j] = tmp;
+    [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-
-  return pool.slice(0, MAX_UPGRADE_OPTIONS).map((id) => ({
-    id,
-    title: UPGRADE_CATALOG[id].title,
-    description: UPGRADE_CATALOG[id].description,
-    nextLevel: (state.player.upgrades[id] ?? 0) + 1,
-  }));
+  return pool.slice(0, MAX_UPGRADE_OPTIONS);
 }
 
 function maybeLevelUp(state: GameState): void {
@@ -439,7 +456,7 @@ function maybeLevelUp(state: GameState): void {
 
   player.xp -= player.xpToNext;
   player.level += 1;
-  player.xpToNext = xpThreshold(player.level);
+  player.xpToNext = state.run ? 22 + (player.level - 1) * 13 + Math.floor(player.level ** 2 * .28) : xpThreshold(player.level);
   state.upgradeOptions = buildUpgradeOptions(state);
   state.phase = state.upgradeOptions.length > 0 ? 'upgrade' : 'playing';
   addImpact(state, 'levelUp', player.pos);
@@ -567,6 +584,11 @@ function updatePlayer(state: GameState, move: Vec2, pulse: boolean, dt: number):
     state.bounds.y + state.bounds.h - radius,
   );
 
+  if (state.run) {
+    state.run.move = { x: mx * player.stats.moveSpeed, y: my * player.stats.moveSpeed };
+    player.energy = Math.min(player.maxEnergy, player.energy + dt * 2);
+    separateObstacles(state, player.pos, player.radius);
+  }
   if (pulse && player.energy >= PULSE_COST) {
     player.energy -= PULSE_COST;
     const pulseDamage =
@@ -579,8 +601,9 @@ function updatePlayer(state: GameState, move: Vec2, pulse: boolean, dt: number):
         hurtEnemyAt(state, i, pulseDamage, false);
         const survivor = state.enemies[i];
         if (survivor && survivor.id === enemy.id) {
-          survivor.pos.x += dir.x * PULSE_PUSH;
-          survivor.pos.y += dir.y * PULSE_PUSH;
+          const push = survivor.variant === 'queen' ? 0 : PULSE_PUSH;
+          survivor.pos.x += dir.x * push;
+          survivor.pos.y += dir.y * push;
           survivor.vel.x += dir.x * PULSE_PUSH * 2;
           survivor.vel.y += dir.y * PULSE_PUSH * 2;
         }
@@ -612,8 +635,13 @@ function updateEnemies(state: GameState, dt: number): void {
     const dy = player.pos.y - enemy.pos.y;
     const dist = Math.hypot(dx, dy) || EPSILON;
     const dir = { x: dx / dist, y: dy / dist };
-    const baseSpeed = ENEMY_TEMPLATES[enemy.kind].speed;
-    const speed = baseSpeed * Math.min(1.55, 1 + (waveNumber - 1) * 0.035);
+    if (enemy.variant === 'queen' && state.run) {
+      updateQueen(state, enemy, dt);
+      continue;
+    }
+    const baseSpeed = enemy.speed ?? ENEMY_TEMPLATES[enemy.kind].speed;
+    const charge = enemy.variant === 'hound' && (state.time + enemy.id) % 5 > 4.2;
+    const speed = baseSpeed * Math.min(1.55, 1 + (waveNumber - 1) * 0.035) * (charge ? 1.65 : 1);
 
     if (enemy.kind === 'drone') {
       // Rápido e direto, com uma leve oscilação lateral para não ser uma linha reta.
@@ -651,13 +679,14 @@ function updateEnemies(state: GameState, dt: number): void {
       if (enemy.fireCooldown <= 0) {
         fireEnemyProjectile(state, enemy);
         enemy.fireCooldown =
-          Math.max(0.95, 2.35 - waveNumber * 0.07) * randomRange(state, 0.85, 1.15);
+          (enemy.variant === 'spore' ? 5.8 : Math.max(0.95, 2.35 - waveNumber * 0.07)) * randomRange(state, 0.85, 1.15);
       }
     }
 
     enemy.pos.x += enemy.vel.x * dt;
     enemy.pos.y += enemy.vel.y * dt;
 
+    if (state.run) separateObstacles(state, enemy.pos, enemy.radius);
     if (enemy.kind === 'shooter') {
       // Shooters nascem fora da arena, mas não podem recuar além da faixa em
       // que os projéteis do jogador ainda são atualizados. Sem este limite, um
@@ -775,6 +804,224 @@ function updateContactDamage(state: GameState): boolean {
   return false;
 }
 
+function initializeRebirth(state: GameState, config: RunConfig): void {
+  const character = CHARACTERS[config.character];
+  state.player.maxHp = character.maxHp;
+  state.player.hp = character.maxHp;
+  state.player.stats.moveSpeed = character.moveSpeed;
+  state.player.stats.magnetRadius = 220;
+  state.player.xpToNext = 22;
+  state.wave.toSpawn = 0;
+  state.run = {
+    ...config, move: { x: 0, y: 0 }, spawnIndex: 0, bossSpawned: false, bossDefeated: false,
+    ranks: { [character.startWeapon]: 1 }, cooldowns: {}, mines: [],
+  };
+}
+
+function separateObstacles(state: GameState, pos: Vec2, radius: number): void {
+  if (!state.run) return;
+  for (const obstacle of BIOMES[state.run.biome].obstacles) {
+    const dx = pos.x - obstacle.x;
+    const dy = pos.y - obstacle.y;
+    const minimum = radius + obstacle.radius;
+    const square = dx * dx + dy * dy;
+    if (square >= minimum * minimum) continue;
+    const length = Math.sqrt(square);
+    pos.x = obstacle.x + (length ? dx / length : 1) * minimum;
+    pos.y = obstacle.y + (length ? dy / length : 0) * minimum;
+    if (pos === state.player.pos) {
+      pos.x = clamp(pos.x, radius, ARENA_WIDTH - radius);
+      pos.y = clamp(pos.y, radius, ARENA_HEIGHT - radius);
+    }
+  }
+}
+
+function spawnRebirthEnemy(state: GameState, variant: EnemyVariant, scale: number): void {
+  if (state.enemies.length >= MAX_ENEMIES) return;
+  const def = ENEMIES[variant];
+  const kind: EnemyKind = variant === 'spore' || variant === 'shooter' ? 'shooter'
+    : variant === 'brute' || variant === 'elite' || variant === 'queen' ? 'brute' : 'drone';
+  const maxHp = Math.round(def.hp * scale);
+  const pos = variant === 'queen' ? { x: 480, y: 75 } : chooseSpawnPoint(state, def.radius);
+  state.enemies.push({
+    id: state.nextId++, kind, variant, pos, vel: { x: 0, y: 0 }, radius: def.radius,
+    hp: maxHp, maxHp, speed: def.speed,
+    contactDamage: Math.round(def.contactDamage * (1 + (scale - 1) * .45)),
+    fireCooldown: 1.3 + random(state), xpValue: def.xpValue, hitFlash: 0,
+  });
+}
+
+function updateEncounter(state: GameState, dt: number): void {
+  const run = state.run;
+  if (!run) return;
+  state.wave.number = Math.min(12, Math.floor(state.time / 60) + 1);
+  state.wave.elapsed = state.time % 60;
+  if (state.time >= RUN_SECONDS && run.bossDefeated) {
+    state.phase = 'victory';
+    state.score += 3000;
+    return;
+  }
+  if (state.time >= 900) {
+    state.phase = 'gameover';
+    return;
+  }
+  if (!run.bossSpawned && state.time >= RUN_SECONDS - 60) {
+    if (state.enemies.length === MAX_ENEMIES) state.enemies.shift();
+    spawnRebirthEnemy(state, 'queen', 1);
+    run.bossSpawned = true;
+  }
+  if (run.bossDefeated || state.time >= RUN_SECONDS) return;
+  state.wave.spawnTimer -= dt;
+  if (state.wave.spawnTimer > 0 || state.enemies.length >= MAX_ENEMIES) return;
+  const encounter = encounterAt(state.time, run.spawnIndex++, run.biome);
+  const variant = encounter.kind === 'queen' ? 'elite'
+    : encounter.kind === 'spore' && state.time < 90 && run.spawnIndex % 6 !== 0 ? 'drone' : encounter.kind;
+  spawnRebirthEnemy(state, variant, encounter.scale);
+  if (state.time > 275 && !run.bossSpawned) {
+    spawnRebirthEnemy(state, run.spawnIndex % 3 ? 'drone' : 'hound', encounter.scale);
+    if (state.time > 505) spawnRebirthEnemy(state, 'hound', encounter.scale);
+  }
+  state.wave.spawnTimer = encounter.cadence * (state.time < 110 ? .72 : 1) * (run.bossSpawned ? 1.8 : 1);
+}
+
+function updateQueen(state: GameState, enemy: Enemy, dt: number): void {
+  const direction = normalize(state.player.pos.x - enemy.pos.x, state.player.pos.y - enemy.pos.y);
+  const aim = Math.atan2(direction.y, direction.x);
+  const pattern = bossPattern(state.time, enemy.hp / enemy.maxHp);
+  enemy.fireCooldown -= dt;
+  const speed = enemy.fireCooldown < pattern.telegraphTime ? pattern.speed * .22 : pattern.speed;
+  enemy.vel.x = direction.x * speed;
+  enemy.vel.y = direction.y * speed;
+  enemy.pos.x = clamp(enemy.pos.x + enemy.vel.x * dt, enemy.radius, ARENA_WIDTH - enemy.radius);
+  enemy.pos.y = clamp(enemy.pos.y + enemy.vel.y * dt, enemy.radius, ARENA_HEIGHT - enemy.radius);
+  if (enemy.fireCooldown > 0) return;
+  enemy.fireCooldown = pattern.cooldown;
+  if (pattern.telegraph === 'summon') {
+    spawnRebirthEnemy(state, 'hound', 2);
+    spawnRebirthEnemy(state, 'elite', 1.4);
+  }
+  for (let i = 0; i < pattern.shots && state.projectiles.length < MAX_PROJECTILES; i++) {
+    const angle = pattern.telegraph === 'line' ? aim + (i - (pattern.shots - 1) / 2) * .14
+      : (i / pattern.shots) * Math.PI * 2 + (pattern.telegraph === 'spiral' ? state.time * .8 : aim);
+    const velocity = pattern.telegraph === 'spiral' ? 176 + i * 6 : 215;
+    state.projectiles.push({
+      id: state.nextId++, owner: 'enemy', pos: { ...enemy.pos },
+      vel: { x: Math.cos(angle) * velocity, y: Math.sin(angle) * velocity },
+      radius: 6, damage: 12, pierceLeft: 0, ttl: 3.4, hitIds: [],
+    });
+  }
+}
+
+function arsenalImpact(state: GameState, kind: 'blast' | 'arc', pos: Vec2, radius?: number, from?: Vec2): void {
+  if (state.impacts.length === MAX_IMPACTS) state.impacts.shift();
+  state.impacts.push({
+    id: state.nextId++, kind, pos: { ...pos }, radius, from: from && { ...from }, ttl: .24, maxTtl: .24,
+  });
+}
+
+function hitArea(state: GameState, pos: Vec2, radius: number, damage: number): void {
+  for (let i = state.enemies.length - 1; i >= 0; i--) {
+    const enemy = state.enemies[i];
+    if (distanceSq(enemy.pos, pos) <= (radius + enemy.radius) ** 2) hurtEnemyAt(state, i, damage);
+  }
+}
+
+function discharge(state: GameState, target: Enemy, start: Vec2, damage: number, jumps: number, radius: number, falloff: number): void {
+  let origin = start;
+  let enemy: Enemy | undefined = target;
+  const seen = new Set<number>();
+  for (let i = 0; enemy && i <= jumps; i++) {
+    const index = state.enemies.indexOf(enemy);
+    if (index < 0) break;
+    seen.add(enemy.id);
+    arsenalImpact(state, 'arc', enemy.pos, undefined, origin);
+    origin = enemy.pos;
+    hurtEnemyAt(state, index, damage);
+    damage *= falloff;
+    let nearest = radius * radius;
+    enemy = undefined;
+    for (const candidate of state.enemies) {
+      if (seen.has(candidate.id)) continue;
+      const range = distanceSq(origin, candidate.pos);
+      if (range >= nearest) continue;
+      nearest = range;
+      enemy = candidate;
+    }
+  }
+}
+
+function updateArsenal(state: GameState, target: Enemy | null, dt: number): void {
+  const run = state.run;
+  if (!run) return;
+  const player = state.player;
+  run.mines = run.mines.filter(mine => {
+    mine.fuse -= dt;
+    if (mine.fuse > 0) return true;
+    hitArea(state, mine.pos, mine.radius, mine.damage);
+    arsenalImpact(state, 'blast', mine.pos, mine.radius);
+    return false;
+  });
+  const aim = Math.atan2(player.aim.y, player.aim.x);
+  for (const id of WEAPON_IDS) {
+    const rank = run.ranks[id];
+    if (!rank) continue;
+    run.cooldowns[id] = Math.max(0, (run.cooldowns[id] ?? 0) - dt);
+    if (run.cooldowns[id] > 0 || !target) continue;
+    const evolution = weaponEvolution(id, run.ranks)?.result;
+    const attack = makeWeaponAttack(id, Math.max(rank, evolution?.grantedRank ?? 1), aim, state.time);
+    const range = attack.range * (evolution?.rangeMultiplier ?? 1);
+    if (distanceSq(player.pos, target.pos) > range ** 2) continue;
+    const damage = (attack.damage + (player.stats.damage - 12) * .62) * (evolution?.damageMultiplier ?? 1);
+    run.cooldowns[id] = attack.cooldown * (2.4 / player.stats.fireRate) * (evolution?.cooldownMultiplier ?? 1);
+    switch (attack.type) {
+      case 'single':
+      case 'fan':
+      case 'pierce': {
+        const angles = attack.type === 'fan' ? [...attack.angles] : Array.from({ length: attack.projectiles }, (_, i) => aim + i * .075);
+        const extra = player.stats.projectiles - 1;
+        for (let i = 0; i < extra; i++) angles.push(aim + (i % 2 ? -1 : 1) * (.15 + Math.floor(i / 2) * .1));
+        for (const angle of angles) {
+          if (state.projectiles.length >= MAX_PROJECTILES) break;
+          const speed = attack.projectileSpeed;
+          state.projectiles.push({
+            id: state.nextId++, owner: 'player', weapon: id, pos: { ...player.pos },
+            vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+            radius: attack.type === 'pierce' ? attack.beamWidth : 4, damage,
+            pierceLeft: attack.pierce + player.stats.pierce + (evolution?.effect.kind === 'pierceBonus' ? evolution.effect.extraPierce : 0),
+            ttl: range / speed, hitIds: [],
+          });
+          state.stats.shotsFired++;
+        }
+        break;
+      }
+      case 'rotating':
+        for (const angle of attack.orbAngles) {
+          const pos = { x: player.pos.x + Math.cos(angle) * attack.orbitRadius, y: player.pos.y + Math.sin(angle) * attack.orbitRadius };
+          hitArea(state, pos, attack.orbRadius * 1.45, damage);
+          arsenalImpact(state, 'blast', pos, attack.orbRadius);
+          const storm = weaponEvolution('arc', run.ranks)?.result.effect;
+          if (storm?.kind === 'chainOnHit') {
+            const close = state.enemies.find(enemy => distanceSq(pos, enemy.pos) < (attack.orbRadius * 2) ** 2);
+            if (close) discharge(state, close, pos, damage * .55, storm.chainJumps, storm.chainRange, storm.falloff);
+          }
+        }
+        break;
+      case 'delayed':
+        for (let i = 0; i < attack.count && run.mines.length < 30; i++) {
+          const angle = attack.dropAngle + i * .34;
+          const pos = {
+            x: clamp(player.pos.x + Math.cos(angle) * attack.dropDistance, 12, ARENA_WIDTH - 12),
+            y: clamp(player.pos.y + Math.sin(angle) * attack.dropDistance, 12, ARENA_HEIGHT - 12),
+          };
+          run.mines.push({ pos, fuse: attack.fuse, radius: attack.blastRadius, damage });
+        }
+        break;
+      case 'chain':
+        discharge(state, target, player.pos, damage, attack.chainJumps, attack.chainRange, attack.chainFalloff);
+        break;
+    }
+  }
+}
 function simulate(state: GameState, move: Vec2, pulse: boolean, dt: number): void {
   state.time += dt;
   state.stats.timeAlive += dt;
@@ -795,7 +1042,10 @@ function simulate(state: GameState, move: Vec2, pulse: boolean, dt: number): voi
   updatePlayer(state, move, pulse, dt);
   if (state.phase !== 'playing') return;
 
-  updateWave(state, dt);
+  if (state.run) {
+    updateEncounter(state, dt);
+    if (state.phase !== 'playing') return;
+  } else updateWave(state, dt);
   updateEnemies(state, dt);
 
   // Mira automática no inimigo mais próximo (mesmo antes de atirar).
@@ -816,7 +1066,8 @@ function simulate(state: GameState, move: Vec2, pulse: boolean, dt: number): voi
     if (dir.x !== 0 || dir.y !== 0) state.player.aim = dir;
   }
 
-  if (state.player.fireCooldown <= 0 && state.enemies.length > 0) {
+  if (state.run) updateArsenal(state, nearest, dt);
+  else if (state.player.fireCooldown <= 0 && state.enemies.length > 0) {
     firePlayerProjectiles(state, state.player.aim);
     state.player.fireCooldown = 1 / Math.max(0.1, state.player.stats.fireRate);
   }
@@ -839,12 +1090,12 @@ function simulate(state: GameState, move: Vec2, pulse: boolean, dt: number): voi
  * Cria uma partida nova. Sem seed usa uma constante fixa (determinismo por padrão).
  * A seed negativa/fracionária é normalizada para uint32.
  */
-export function createGame(seed: number = DEFAULT_SEED): GameState {
+export function createGame(seed: number = DEFAULT_SEED, config?: RunConfig): GameState {
   const normalizedSeed = Number.isFinite(seed) ? Math.abs(Math.trunc(seed)) >>> 0 : DEFAULT_SEED;
   const rng = normalizedSeed === 0 ? 0x9e3779b9 : normalizedSeed;
   const maxHp = PLAYER_START_HP;
 
-  return {
+  const state: GameState = {
     seed: normalizedSeed,
     rng,
     phase: 'playing',
@@ -890,6 +1141,8 @@ export function createGame(seed: number = DEFAULT_SEED): GameState {
     upgradeOptions: [],
     nextId: 1,
   };
+  if (config) initializeRebirth(state, config);
+  return state;
 }
 
 /**
@@ -924,6 +1177,13 @@ export function applyUpgrade(state: GameState, id: UpgradeId): GameState {
   if (!state.upgradeOptions.some((option) => option.id === id)) return state;
 
   const next = cloneState(state);
+  if (next.run && id.startsWith('weapon-')) {
+    const weapon = id.slice(7) as WeaponId;
+    next.run.ranks[weapon] = (next.run.ranks[weapon] ?? 0) + 1;
+    next.phase = 'playing';
+    next.upgradeOptions = [];
+    return next;
+  }
   const player = next.player;
   const level = (player.upgrades[id] ?? 0) + 1;
   player.upgrades[id] = level;

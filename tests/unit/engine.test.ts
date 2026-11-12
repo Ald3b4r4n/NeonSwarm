@@ -66,6 +66,8 @@ function upgradeChangesEffect(state: GameState, id: UpgradeId): boolean {
       return after.stats.pierce > before.stats.pierce;
     case 'regen':
       return after.stats.regenPerSec > before.stats.regenPerSec;
+    default:
+      return false;
   }
 }
 

@@ -20,8 +20,28 @@ export interface InputState {
 }
 
 export type EnemyKind = 'drone' | 'brute' | 'shooter';
-export type Phase = 'playing' | 'upgrade' | 'gameover';
+export type Phase = 'playing' | 'upgrade' | 'gameover' | 'victory';
+export type CharacterId = 'vesper' | 'rook';
+export type BiomeId = 'station' | 'nursery';
+export type WeaponId = 'coil' | 'scatter' | 'lance' | 'orbit' | 'mine' | 'arc';
+export type EnemyVariant = EnemyKind | 'spore' | 'hound' | 'elite' | 'queen';
+
+export interface RunConfig {
+  character: CharacterId;
+  biome: BiomeId;
+}
+
+export interface RebirthRun extends RunConfig {
+  move: Vec2;
+  spawnIndex: number;
+  bossSpawned: boolean;
+  bossDefeated: boolean;
+  ranks: Partial<Record<WeaponId, number>>;
+  cooldowns: Partial<Record<WeaponId, number>>;
+  mines: { pos: Vec2; fuse: number; radius: number; damage: number }[];
+}
 export type UpgradeId =
+  | `weapon-${WeaponId}`
   | 'damage' | 'fireRate' | 'speed' | 'maxHp' | 'multishot' | 'magnet' | 'pierce' | 'regen';
 
 export interface PlayerStats {
@@ -58,6 +78,8 @@ export interface Player {
 export interface Enemy {
   id: number;
   kind: EnemyKind;
+  variant?: EnemyVariant;
+  speed?: number;
   pos: Vec2;
   vel: Vec2;
   radius: number;
@@ -75,6 +97,7 @@ export interface Enemy {
 export interface Projectile {
   id: number;
   owner: 'player' | 'enemy';
+  weapon?: WeaponId;
   pos: Vec2;
   vel: Vec2;
   radius: number;
@@ -125,7 +148,9 @@ export interface GameStats {
 /** Efeito transitório emitido pelo motor para a UI desenhar; expira por `ttl`. */
 export interface Impact {
   id: number;
-  kind: 'hit' | 'kill' | 'playerHurt' | 'pickup' | 'pulse' | 'levelUp';
+  kind: 'hit' | 'kill' | 'playerHurt' | 'pickup' | 'pulse' | 'levelUp' | 'blast' | 'arc';
+  radius?: number;
+  from?: Vec2;
   pos: Vec2;
   ttl: number;
   maxTtl: number;
@@ -134,6 +159,7 @@ export interface Impact {
 }
 
 export interface GameState {
+  run?: RebirthRun;
   seed: number;
   /** Estado interno do PRNG; mantém determinismo (mesma seed + inputs = mesmo resultado). */
   rng: number;
@@ -158,7 +184,7 @@ export interface GameState {
 
 /** API de src/game/engine.ts (funções puras; não mutam argumentos, retornam novo estado). */
 export interface Engine {
-  createGame(seed?: number): GameState;
+  createGame(seed?: number, config?: RunConfig): GameState;
   /** Em 'upgrade' e 'gameover' retorna o estado inalterado. dt é limitado a [0, MAX_DT]. */
   stepGame(state: GameState, input: InputState, dtSeconds: number): GameState;
   /** Válido só em 'upgrade' com id presente em upgradeOptions; caso contrário retorna o estado inalterado. Retorna a 'playing'. */

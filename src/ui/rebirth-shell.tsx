@@ -69,12 +69,11 @@ export function LaunchScreen({
   return (
     <section className="rebirth-screen" aria-labelledby="rebirth-title">
       <div className="rebirth-masthead">
-        <p className="rebirth-kicker">Neon Swarm — Edição Rebirth</p>
         <h1 id="rebirth-title" className="rebirth-title">
           NEON SWARM <span>REBIRTH</span>
         </h1>
         <p className="rebirth-standfirst">
-          Escolha a unidade, escolha o bioma e entre no enxame. Partidas curtas, recorde à vista.
+          Doze minutos para romper o enxame e derrubar a Rainha de Cromo.
         </p>
         <p className="rebirth-record">
           Recorde <strong>{record}</strong>
@@ -84,10 +83,6 @@ export function LaunchScreen({
       <div className="rebirth-grid">
         <figure className="rebirth-cover">
           <img src={cover} alt="Arte de capa de Neon Swarm Rebirth" />
-          <figcaption>
-            <span className="rebirth-seal">Rebirth</span>
-            Capa oficial — arte integrada como arquivo local.
-          </figcaption>
         </figure>
 
         <div className="rebirth-picks">

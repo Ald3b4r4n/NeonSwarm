@@ -2,9 +2,9 @@
   "assets": [
     {
       "id": "vesper",
-      "bytes": 798688,
-      "sha256": "d6236d99fb27bcd4533839589a43c6799eefbfde25c242ff407caa6f788ae4b3",
-      "triangles": 9102,
+      "bytes": 867860,
+      "sha256": "ea5b268d8cebe0a865ec0ec55ec50243ef0a00261cdb331e19a2c6c94b6575b4",
+      "triangles": 10218,
       "joints": 15,
       "materials": 5,
       "textures": 1,
@@ -53,9 +53,9 @@
     },
     {
       "id": "drone",
-      "bytes": 395240,
-      "sha256": "a2a0d78f38576db4ea882048780afbeff704c7fe3afa1424200ea46bc313d4aa",
-      "triangles": 3560,
+      "bytes": 435720,
+      "sha256": "5cc0e6536e8651e3d579f7041cdcaa27c495d9feb30a513360169b558d61ba23",
+      "triangles": 4228,
       "joints": 8,
       "materials": 5,
       "textures": 1,

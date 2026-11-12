@@ -21,10 +21,10 @@ def texture():
     rgba=[]
     for j in range(256):
         for i in range(256):
-            v=noise_vector(Vector((i*.18,j*.18,.7)))[0]
+            v=noise_vector(Vector((i*.024,j*.43,.7)))[0]
             micro=.016*math.sin(i*23.1+j*17.3)
             groove=-.10 if j%64 in (0,1,2) else 0
-            c=.53+.11*v+micro+groove
+            c=.60+.045*v+micro+groove*.3
             rgba.extend((c*.93,c*.97,c,1))
     im.pixels.foreach_set(rgba)
     im.pack()
@@ -89,9 +89,9 @@ def build(name):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.render.fps=30
     tex=texture()
-    shell=material('Brushed palladium composite',(.65,.67,.7),.46,.31,tex=tex)
+    shell=material('Brushed palladium composite',(.65,.67,.7),.59,.28,tex=tex)
     carbon=material('Graphite / flexible under-armour',(.038,.052,.081),.2,.53)
-    cer=material('Cobalt ceramic' if name=='vesper' else 'Oxide ceramic',(.082,.29,.53) if name=='vesper' else (.45,.063,.023),.34,.34)
+    cer=material('Cobalt ceramic' if name=='vesper' else 'Oxide ceramic',(.08,.38,.63) if name=='vesper' else (.45,.063,.023),.34,.34)
     lit=material('Cryocyan ion channels' if name=='vesper' else 'Infrared warning bars',(.025,.86,1) if name=='vesper' else (1,.20,.038),.12,.23,2.6)
     gold=material('Warning anodized amber',(.92,.28,.035),.28,.41)
     rootbone=('Root',None,(0,0,0),(0,0,.20))
@@ -136,7 +136,15 @@ def build(name):
             plate(f'Beveled tibia guard {side}',f'Shin.{side}',[(.13,k*.145,.062,-.10,.09),(.36,k*.145,.086,-.138,.09),(.49,k*.145,.106,-.165,.095),(.55,k*.145,.077,-.107,.08)],shell,shield)
             plate(f'Boot sole and toe {side}',f'Foot.{side}',[(.020,k*.145,.084,-.23,.081),(.078,k*.145,.101,-.23,.10),(.16,k*.145,.079,-.145,.10)],carbon)
             plate(f'Boot toe cap {side}',f'Foot.{side}',[(.064,k*.145,.086,-.25,-.109),(.123,k*.145,.084,-.205,-.096)],cer,shield)
-        plate('Coil receiver','Weapon',[(1.07,.36,.045,-.60,-.18),(1.16,.36,.070,-.77,-.16),(1.25,.36,.066,-.68,-.16)],carbon)
+        plate('Coil receiver','Weapon',[(1.07,.36,.045,-.70,-.18),(1.16,.36,.070,-.88,-.16),(1.25,.36,.066,-.83,-.16)],carbon)
+        plate('Focusing crown','Weapon',[(1.125,.36,.048,-.99,-.86),(1.19,.36,.061,-.985,-.85),(1.24,.36,.046,-.97,-.86)],shell,octagon)
+        plate('Exposed ion muzzle','Weapon',[(1.152,.36,.024,-1.01,-.967),(1.204,.36,.032,-1.006,-.962)],lit,octagon,.004)
+        for k in range(2):
+            z=.31+.044*k
+            plate(f'Field unit stripe {k}','Shin.L',[(z,-.145,.043,-.151,-.101),(z+.016,-.145,.052,-.16,-.10)],gold,blade,.004)
+        for k in (-1,1):
+            plate(f'Helmet side exhaust {k}','Head',[(1.59,k*.122,.016,-.046,.064),(1.655,k*.117,.017,-.053,.074)],carbon,blade,.004)
+            plate(f'Helmet telemetry {k}','Head',[(1.618,k*.133,.011,-.033,.060),(1.634,k*.129,.010,-.037,.062)],lit,blade,.002)
         for n in range(5):
             y=-.70+n*.091
             plate(f'Induction cage {n}','Weapon',[(1.135,.36,.073,y,y+.032),(1.248,.36,.061,y,y+.032)],shell)
@@ -145,7 +153,9 @@ def build(name):
         plate('Keel and armour ribs','Pelvis',[(.72,0,.14,-.10,.19),(.88,0,.32,-.27,.35),(1.16,0,.34,-.33,.36)],carbon,shield)
         plate('Oxide wedge dorsal armour','Chest',[(.94,0,.27,-.40,.33),(1.22,0,.46,-.46,.48),(1.42,0,.31,-.18,.40),(1.55,0,.15,-.07,.30)],cer,blade)
         plate('Anterior sensor hood','Head',[(1.00,0,.22,-.48,-.20),(1.17,0,.30,-.49,-.14),(1.26,0,.18,-.39,-.12)],shell,shield)
-        plate('Infrared sensor array','Head',[(1.08,0,.16,-.505,-.34),(1.148,0,.21,-.508,-.35)],lit,shield,.003)
+        for k in (-1,1):
+            plate(f'Angled sensor {k}','Head',[(1.068,k*.096,.033,-.519,-.38),(1.13,k*.134,.068,-.521,-.40),(1.156,k*.144,.062,-.515,-.40)],lit,blade,.003)
+            plate(f'Ventral articulated spike {k}','Claw.L' if k<0 else 'Claw.R',[(.68,k*.73,.018,-.29,-.23),(.84,k*.65,.064,-.25,-.11),(1.06,k*.55,.061,-.10,.02)],carbon,blade,.005)
         for side,k in [('L',-1),('R',1)]:
             plate(f'Armoured wing {side}',f'Wing.{side}',[(1.00,k*.45,.14,-.11,.24),(1.15,k*.54,.26,-.18,.27),(1.28,k*.47,.21,-.12,.24)],shell,blade)
             for n in range(4):
@@ -200,6 +210,7 @@ def animate(arm,name):
                     if bone.startswith('Wing'):z=sign*.28*u
                 if clip in ('Fire','Recoil'):
                     kick=math.sin(math.pi*min(1,t*2)) if t<.5 else .30*math.sin(math.pi*(t-.5)*2)
+                    if clip=='Recoil':kick=1.25*max(0,1-t*3) if t>0 else 0
                     if bone=='Weapon': x=.32*kick; travel=(0,-.105*kick,0)
                     if bone=='Fore.R':x=-.36*kick
                     if bone=='Chest':x=-.11*kick

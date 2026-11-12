@@ -743,6 +743,7 @@ function updateProjectiles(state: GameState, dt: number): void {
     }
 
     if (projectile.owner === 'player') {
+      let firstCoilContact: Vec2 | undefined;
       // Itera de trás para frente porque inimigos mortos são removidos na hora.
       for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
         const enemy = state.enemies[i] as Enemy;
@@ -750,6 +751,10 @@ function updateProjectiles(state: GameState, dt: number): void {
         const radius = projectile.radius + enemy.radius;
         if (distanceSq(projectile.pos, enemy.pos) > radius * radius) continue;
 
+        if (projectile.weapon === 'coil' && projectile.hitIds.length === 0) {
+          firstCoilContact = { ...enemy.pos };
+          arsenalImpact(state, 'blast', enemy.pos, 14 + (projectile.rank ?? 1) * 5, undefined, projectile.rank, 'coil');
+        }
         projectile.hitIds.push(enemy.id);
         hurtEnemyAt(state, i, projectile.damage);
 
@@ -760,6 +765,7 @@ function updateProjectiles(state: GameState, dt: number): void {
           break;
         }
       }
+      if (firstCoilContact && (projectile.rank ?? 1) >= 3) coilDischarge(state, projectile, firstCoilContact);
     } else {
       const radius = projectile.radius + player.radius;
       if (
@@ -774,6 +780,31 @@ function updateProjectiles(state: GameState, dt: number): void {
   }
 
   state.projectiles = state.projectiles.filter((projectile) => projectile.ttl > 0);
+}
+
+/** Fork on the first impact only; no branching when a bolt subsequently pierces. */
+function coilDischarge(state: GameState, shot: Projectile, start: Vec2): void {
+  const rank = shot.rank ?? 3;
+  const seen = new Set(shot.hitIds);
+  let origin = start;
+  let damage = shot.damage * .34;
+  for (let jump = 0; jump < rank - 2; jump++) {
+    let closest = (68 + 12 * rank) ** 2;
+    let target = -1;
+    state.enemies.forEach((enemy, index) => {
+      const range = distanceSq(origin, enemy.pos);
+      if (seen.has(enemy.id) || range >= closest) return;
+      target = index;
+      closest = range;
+    });
+    if (target < 0) break;
+    const enemy = state.enemies[target];
+    seen.add(enemy.id);
+    arsenalImpact(state, 'arc', enemy.pos, undefined, origin, rank, 'coil');
+    origin = { ...enemy.pos };
+    hurtEnemyAt(state, target, damage);
+    damage *= .66;
+  }
 }
 
 function updateOrbs(state: GameState, dt: number): void {

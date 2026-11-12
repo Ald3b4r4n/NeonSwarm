@@ -31,6 +31,24 @@ describe('progressão visual e funcional da Preview 2', () => {
     }
   });
 
+  it.each([1, 2, 3, 4, 5])('a Bobina rank %s atinge vizinhos somente a partir do terceiro rank', rank => {
+    const state = firingState(rank);
+    const primary = state.enemies[0];
+    for (let i = 1; i <= 3; i++) state.enemies.push({
+      ...primary, id: state.nextId++, pos: { x: primary.pos.x, y: primary.pos.y + 55 * i },
+    });
+    state.run!.freezeEnemies = true;
+    state.wave.spawnTimer = 100;
+    state.projectiles.push({
+      id: state.nextId++, owner: 'player', weapon: 'coil', rank, pos: { ...primary.pos }, vel: { x: 0, y: 0 },
+      radius: 4, damage: 30, pierceLeft: 0, ttl: .1, hitIds: [],
+    });
+    state.run!.cooldowns.coil = 5;
+    const next = stepGame(state, idle, 1 / 60);
+    expect(next.impacts.filter(impact => impact.kind === 'arc' && impact.weapon === 'coil')).toHaveLength(Math.max(0, rank - 2));
+    expect(next.enemies.filter(enemy => enemy.hp < 300)).toHaveLength(1 + Math.max(0, rank - 2));
+  });
+
   it('faz o Pulso de rank 5 alcançar e atingir mais forte que o rank 1', () => {
     const pulse = { ...idle, pulse: true };
     const first = stepGame(firingState(1), pulse, 1 / 60);

@@ -1,0 +1,1 @@
+function u(n){if(!n)return null;if(typeof n=="string")return n;if(typeof n.play=="function")return null;const t=n.name;return typeof t=="string"?t:null}function l(n,t){if(t&&typeof t.play=="function")return t;const o=u(t);return o!==null?n.configuration.coordinator.getSoundAsset(o):null}export{u as G,l as R};

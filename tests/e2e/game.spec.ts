@@ -123,10 +123,12 @@ test('a partida progride, oferece upgrades, causa dano e salva o recorde após a
 
 test('a seleção informa falha de asset e permite tentar novamente', async ({ page }) => {
   await page.goto('./');
-  await page.route('**/reforged/drone.glb', route => route.abort(), { times: 1 });
+  const droneAsset = '**/reforged/drone.glb';
+  await page.route(droneAsset, route => route.fulfill({ status: 404 }));
   await page.getByRole('button', { name: /^jogar$/i }).click();
   await expect(page.getByRole('alert')).toContainText('Falha ao carregar a arena');
   await expect(page.getByTestId('arena')).toBeHidden();
+  await page.unroute(droneAsset);
   await page.getByRole('button', { name: /^jogar$/i }).click();
   await expect(page.getByTestId('arena')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);

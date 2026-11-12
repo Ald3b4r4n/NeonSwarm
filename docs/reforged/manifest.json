@@ -1,0 +1,106 @@
+{
+  "assets": [
+    {
+      "id": "vesper",
+      "bytes": 798688,
+      "sha256": "d6236d99fb27bcd4533839589a43c6799eefbfde25c242ff407caa6f788ae4b3",
+      "triangles": 9102,
+      "joints": 15,
+      "materials": 5,
+      "textures": 1,
+      "animations": [
+        {
+          "name": "Idle",
+          "channels": 45,
+          "durationSeconds": 2.033
+        },
+        {
+          "name": "Run",
+          "channels": 45,
+          "durationSeconds": 0.833
+        },
+        {
+          "name": "Turn",
+          "channels": 45,
+          "durationSeconds": 0.633
+        },
+        {
+          "name": "Fire",
+          "channels": 45,
+          "durationSeconds": 0.533
+        },
+        {
+          "name": "Recoil",
+          "channels": 45,
+          "durationSeconds": 0.4
+        },
+        {
+          "name": "Hurt",
+          "channels": 45,
+          "durationSeconds": 0.667
+        },
+        {
+          "name": "Special",
+          "channels": 45,
+          "durationSeconds": 1.367
+        },
+        {
+          "name": "Death",
+          "channels": 45,
+          "durationSeconds": 1.833
+        }
+      ]
+    },
+    {
+      "id": "drone",
+      "bytes": 395240,
+      "sha256": "a2a0d78f38576db4ea882048780afbeff704c7fe3afa1424200ea46bc313d4aa",
+      "triangles": 3560,
+      "joints": 8,
+      "materials": 5,
+      "textures": 1,
+      "animations": [
+        {
+          "name": "Idle",
+          "channels": 24,
+          "durationSeconds": 2.033
+        },
+        {
+          "name": "Run",
+          "channels": 24,
+          "durationSeconds": 0.833
+        },
+        {
+          "name": "Turn",
+          "channels": 24,
+          "durationSeconds": 0.633
+        },
+        {
+          "name": "Fire",
+          "channels": 24,
+          "durationSeconds": 0.533
+        },
+        {
+          "name": "Recoil",
+          "channels": 24,
+          "durationSeconds": 0.4
+        },
+        {
+          "name": "Hurt",
+          "channels": 24,
+          "durationSeconds": 0.667
+        },
+        {
+          "name": "Special",
+          "channels": 24,
+          "durationSeconds": 1.367
+        },
+        {
+          "name": "Death",
+          "channels": 24,
+          "durationSeconds": 1.833
+        }
+      ]
+    }
+  ]
+}

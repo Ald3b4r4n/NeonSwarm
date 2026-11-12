@@ -33,6 +33,7 @@ export interface RunConfig {
 
 export interface RebirthRun extends RunConfig {
   move: Vec2;
+  freezeEnemies?: boolean;
   spawnIndex: number;
   bossSpawned: boolean;
   bossDefeated: boolean;

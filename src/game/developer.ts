@@ -79,9 +79,9 @@ function unlockSynergy(state: GameState, evolutionId: WeaponEvolutionId): GameSt
 
   const ranks = { ...state.run.ranks };
   for (const [weapon, rank] of Object.entries(evolution.requires)) {
-    if (rank !== undefined) ranks[weapon as WeaponId] = rank;
+    if (rank !== undefined) ranks[weapon as WeaponId] = Math.max(rank, ranks[weapon as WeaponId] ?? 0);
   }
-  ranks[evolution.result.weapon] = evolution.result.grantedRank;
+  ranks[evolution.result.weapon] = Math.max(evolution.result.grantedRank, ranks[evolution.result.weapon] ?? 0);
 
   return {
     ...state,
@@ -249,4 +249,9 @@ export function applyDeveloperAction(
     case 'world/spawn':
       return spawnEnemy(state, action.variant);
   }
+}
+
+/** Suspends enemy AI and enemy projectiles for this local test run. */
+export function setDeveloperFreeze(state: GameState, frozen: boolean): GameState {
+  return state.run ? { ...state, run: { ...state.run, freezeEnemies: frozen } } : state;
 }

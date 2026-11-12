@@ -17,6 +17,7 @@ type LaunchScreenProps = {
   onBiome: (id: string) => void;
   onPlay: () => void;
   record: number;
+  onLogoTap?: () => void;
 };
 
 function ChoiceCards({
@@ -65,11 +66,12 @@ export function LaunchScreen({
   onBiome,
   onPlay,
   record,
+  onLogoTap,
 }: LaunchScreenProps) {
   return (
     <section className="rebirth-screen" aria-labelledby="rebirth-title">
       <div className="rebirth-masthead">
-        <h1 id="rebirth-title" className="rebirth-title">
+        <h1 onClick={onLogoTap} id="rebirth-title" className="rebirth-title">
           NEON SWARM <span>REBIRTH</span>
         </h1>
         <p className="rebirth-standfirst">

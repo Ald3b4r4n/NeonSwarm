@@ -1,6 +1,9 @@
+import { applyDeveloperAction, setDeveloperFreeze, type DeveloperAction, type DeveloperStateAction } from '../game/developer.js';
+import { DeveloperPanel } from './developer-panel.js';
+import { QUALITY_PRESETS, readQuality, saveQuality, type FixedQuality, type Quality } from './quality.js';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { createGame, stepGame, applyUpgrade } from '../game/engine.js';
-import { ARENA_HEIGHT, ARENA_WIDTH, type GameState, type UpgradeId, type CharacterId, type BiomeId } from '../game/contracts.js';
+import { ARENA_HEIGHT, ARENA_WIDTH, type GameState, type UpgradeId, type CharacterId, type BiomeId, type WeaponId } from '../game/contracts.js';
 import { drawRebirth } from './rebirth-render.js';
 import { artUrl, loadArenaArt, type ArenaArt } from './rebirth-art.js';
 import { LaunchScreen } from './rebirth-shell.js';
@@ -22,6 +25,15 @@ export function App() {
   const game = useRef<GameState>(snapshot);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [developerOpen, setDeveloperOpen] = useState(false);
+  const [testMode, setTestMode] = useState(false);
+  const [quality, setQuality] = useState(readQuality);
+  const [fpsShown, setFpsShown] = useState(false);
+  const [fps, setFps] = useState(0);
+  const testRun = useRef(false);
+  const developer = useRef({ open: false, speed: 1, fps: false, limit: 0 });
+  const selected = useRef<{ character: CharacterId; biome: BiomeId; weapon?: WeaponId }>({ character: 'vesper', biome: 'station' });
+  const taps = useRef({ at: 0, count: 0 });
   const [portraitTouch, setPortraitTouch] = useState(false);
   const [portraitDismissed, setPortraitDismissed] = useState(false);
   const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
@@ -41,8 +53,8 @@ export function App() {
   const pointer = useRef<{ id: number; x: number; y: number } | null>(null);
   const joystickPointer = useRef<{ id: number; centerX: number; centerY: number; radius: number } | null>(null);
   const pulse = useRef(false);
-  const controls = useRef({ started, paused, reduced });
-  controls.current = { started, paused, reduced };
+  const controls = useRef({ started, paused, reduced, quality });
+  controls.current = { started, paused, reduced, quality };
   const clearInput = () => {
     keys.current.clear();
     stick.current = { x: 0, y: 0 };
@@ -53,20 +65,35 @@ export function App() {
   };
   const publish = () => setSnapshot(game.current);
   function choose(id: UpgradeId) { game.current = applyUpgrade(game.current, id); clearInput(); publish(); field.current?.focus(); }
-  async function begin() {
+  async function begin(options?: { test: true; action?: DeveloperStateAction; frozen?: boolean }) {
     if (loadingRef.current) return;
     if (window.matchMedia('(pointer: coarse)').matches) {
       const orientation = screen.orientation as ScreenOrientation & { lock?: (value: 'landscape') => Promise<void> };
-      void orientation.lock?.('landscape').catch(() => undefined);
+      void orientation?.lock?.('landscape').catch(() => undefined);
     }
     loadingRef.current = true;
     setLoading(true);
     setLoadError(false);
     try {
-      art.current = await loadArenaArt(biome);
-      game.current = createGame(Date.now() >>> 0, { character, biome });
+      const chosen = options ? { ...selected.current } : { character, biome };
+      art.current = await loadArenaArt(chosen.biome);
+      game.current = createGame(Date.now() >>> 0, chosen);
+      if (options && "weapon" in chosen && chosen.weapon) {
+        game.current = applyDeveloperAction(game.current, { type: 'weapon/set-rank', weapon: chosen.weapon, rank: 1 });
+      }
+      if (options?.action) game.current = applyDeveloperAction(game.current, options.action);
+      if (options?.frozen) game.current = setDeveloperFreeze(game.current, true);
+      testRun.current = Boolean(options);
+      setTestMode(Boolean(options));
+      if (!options) {
+        developer.current.speed = 1;
+        developer.current.fps = false;
+        developer.current.limit = 0;
+        setFpsShown(false);
+        closeDeveloper();
+      }
       clearInput();
-      setPaused(false);
+      setPaused(Boolean(options));
       setPortraitDismissed(false);
       setStarted(true);
       publish();
@@ -78,6 +105,78 @@ export function App() {
       setLoading(false);
     }
   }
+  function openDeveloper() {
+    const current = controls.current;
+    if (current.started && !current.paused && game.current.phase === 'playing') return;
+    if (current.started && game.current.run) {
+      selected.current = { ...selected.current, character: game.current.run.character, biome: game.current.run.biome };
+    } else if (!testRun.current) {
+      selected.current = { character, biome };
+    }
+    developer.current.open = true;
+    clearInput();
+    setDeveloperOpen(true);
+  }
+  function closeDeveloper() {
+    developer.current.open = false;
+    setDeveloperOpen(false);
+  }
+  function logoTap() {
+    const now = performance.now();
+    taps.current.count = now - taps.current.at < 850 ? taps.current.count + 1 : 1;
+    taps.current.at = now;
+    if (taps.current.count < 5) return;
+    taps.current.count = 0;
+    openDeveloper();
+  }
+  function handleDeveloperAction(action: DeveloperAction) {
+    if (action.type === 'session/restart') {
+      selected.current = { character, biome };
+      void begin();
+      return;
+    }
+    testRun.current = true;
+    setTestMode(true);
+    switch (action.type) {
+      case 'session/set-sim-speed':
+        developer.current.speed = Math.max(.25, Math.min(4, action.speed));
+        break;
+      case 'session/set-fps-limit':
+        developer.current.limit = action.fps;
+        break;
+      case 'session/set-fps-visible':
+        developer.current.fps = action.visible;
+        setFpsShown(action.visible);
+        break;
+      case 'session/set-frozen':
+        if (!controls.current.started || !game.current.run) void begin({ test: true, frozen: action.frozen });
+        else { game.current = setDeveloperFreeze(game.current, action.frozen); publish(); }
+        break;
+      case 'session/select-character':
+        selected.current.character = action.character;
+        void begin({ test: true });
+        break;
+      case 'session/select-biome':
+        selected.current.biome = action.biome;
+        void begin({ test: true });
+        break;
+      case 'session/select-weapon':
+        selected.current.weapon = action.weapon;
+        if (!controls.current.started || !game.current.run) void begin({ test: true });
+        else {
+          game.current = applyDeveloperAction(game.current, { type: 'weapon/set-rank', weapon: action.weapon, rank: 1 });
+          publish();
+        }
+        break;
+      default:
+        if (!controls.current.started || !game.current.run) void begin({ test: true, action });
+        else {
+          game.current = applyDeveloperAction(game.current, action);
+          publish();
+        }
+    }
+  }
+
   function resume() { clearInput(); setPaused(false); field.current?.focus(); }
 
   useEffect(() => {
@@ -100,21 +199,40 @@ export function App() {
 
   useEffect(() => {
     const node = canvas.current!;
+    let automatic: FixedQuality = 'medium';
+    let applied: FixedQuality | undefined;
     const resize = () => {
       const width = node.getBoundingClientRect().width;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      node.width = Math.max(1, Math.round(width * dpr));
-      node.height = Math.max(1, Math.round(width * ARENA_HEIGHT / ARENA_WIDTH * dpr));
+      applied = controls.current.quality === 'auto' ? automatic : controls.current.quality;
+      const dpr = Math.min(window.devicePixelRatio || 1, QUALITY_PRESETS[applied].dpr);
+      const pixelWidth = Math.max(1, Math.round(width * dpr));
+      const pixelHeight = Math.max(1, Math.round(width * ARENA_HEIGHT / ARENA_WIDTH * dpr));
+      if (node.width !== pixelWidth) node.width = pixelWidth;
+      if (node.height !== pixelHeight) node.height = pixelHeight;
     };
     const observer = new ResizeObserver(resize); observer.observe(node); resize();
-    let frame = 0, previous = 0, accumulator = 0, lastHud = 0;
+    let frame = 0, previous = 0, accumulator = 0, lastHud = 0, lastDraw = 0;
+    let sampleStart = 0, sampleFrames = 0, slowSamples = 0;
     const ctx = node.getContext('2d', { alpha: false });
     const tick = (now: number) => {
       const current = controls.current;
+      if (current.started && !current.paused && !developer.current.open) {
+        if (!sampleStart) sampleStart = now;
+        sampleFrames++;
+        if (now - sampleStart >= 900) {
+          const measured = Math.round(1000 * sampleFrames / (now - sampleStart));
+          if (developer.current.fps) setFps(measured);
+          slowSamples = measured < 46 ? slowSamples + 1 : 0;
+          if (slowSamples >= 2) automatic = 'low';
+          sampleStart = now;
+          sampleFrames = 0;
+        }
+      } else { sampleStart = 0; sampleFrames = 0; }
+      if (applied !== (current.quality === 'auto' ? automatic : current.quality)) resize();
       const dt = previous ? Math.min((now - previous) / 1000, .05) : 0; previous = now;
       const before = game.current.phase;
-      if (current.started && !current.paused && before === 'playing') {
-        accumulator += dt;
+      if (current.started && !current.paused && !developer.current.open && before === 'playing') {
+        accumulator = Math.min(.22, accumulator + dt * developer.current.speed);
         while (accumulator >= 1 / 60 && game.current.phase === 'playing') {
           const pressed = keys.current;
           const x = Number(pressed.has('d') || pressed.has('arrowright')) - Number(pressed.has('a') || pressed.has('arrowleft')) + stick.current.x;
@@ -124,7 +242,10 @@ export function App() {
         }
       } else accumulator = 0;
       if (before !== game.current.phase || now - lastHud >= 100) { setSnapshot(game.current); lastHud = now; }
-      if (ctx && art.current && current.started) drawRebirth(ctx, game.current, art.current, current.reduced);
+      if (ctx && art.current && current.started && (!developer.current.limit || now - lastDraw >= 1000 / developer.current.limit - 1)) {
+        drawRebirth(ctx, game.current, art.current, current.reduced || !QUALITY_PRESETS[applied ?? 'medium'].effects);
+        lastDraw = now;
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -135,6 +256,15 @@ export function App() {
     const autoPause = () => { clearInput(); if (controls.current.started && game.current.phase === 'playing') setPaused(true); };
     const visibility = () => { if (document.hidden) autoPause(); };
     const down = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.code === 'KeyD' && !event.repeat) {
+        event.preventDefault();
+        if (developer.current.open) closeDeveloper(); else openDeveloper();
+        return;
+      }
+      if (developer.current.open) {
+        if (event.key === 'Escape') closeDeveloper();
+        return;
+      }
       if ((event.target as HTMLElement).matches('input, select, textarea')) return;
       const key = event.key.toLowerCase();
       if (!controls.current.started) return;
@@ -153,7 +283,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (started && (snapshot.phase === 'gameover' || snapshot.phase === 'victory')) {
+    if (started && !testRun.current && (snapshot.phase === 'gameover' || snapshot.phase === 'victory')) {
       setRecord(previous => {
         const next = { version: 1 as const, highScore: Math.max(previous.highScore, snapshot.score), bestWave: Math.max(previous.bestWave, snapshot.wave.number) };
         if (next.highScore !== previous.highScore || next.bestWave !== previous.bestWave) saveRecord(next);
@@ -163,7 +293,7 @@ export function App() {
   }, [snapshot.phase, snapshot.score, snapshot.wave.number, started]);
   useEffect(() => { if (paused || snapshot.phase !== 'playing') { clearInput(); primary.current?.focus(); } }, [paused, snapshot.phase]);
 
-  const active = started && !paused && snapshot.phase === 'playing';
+  const active = started && !paused && !developerOpen && snapshot.phase === 'playing';
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!active || pointer.current || event.button !== 0) return;
     event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId);
@@ -206,17 +336,23 @@ export function App() {
     stick.current = { x: 0, y: 0 };
     setJoystickOffset({ x: 0, y: 0 });
   }
+  const qualitySelect = <label className="quality-select">Gráficos <select aria-label="Qualidade gráfica" value={quality}
+    onChange={event => { const next = event.target.value as Quality; setQuality(next); saveQuality(next); }}>
+    <option value="auto">Automático</option><option value="low">Baixo</option>
+    <option value="medium">Médio</option><option value="high">Alto</option>
+  </select></label>;
   const p = snapshot.player;
   const boss = snapshot.enemies.find(enemy => enemy.variant === 'queen');
   return <main className="shell">
     {!started && <LaunchScreen cover={artUrl('cover')} characters={characters} biomes={biomes}
       character={character} biome={biome} record={record.highScore}
       onCharacter={id => { if (id === 'vesper' || id === 'rook') setCharacter(id); }}
-      onBiome={id => { if (id === 'station' || id === 'nursery') setBiome(id); }} onPlay={begin} />}
+      onBiome={id => { if (id === 'station' || id === 'nursery') setBiome(id); }} onPlay={() => { void begin(); }} onLogoTap={logoTap} />}
+    {!started && qualitySelect}
     {loading && <p className="load-state" role="status">Carregando ilustrações da arena…</p>}
     {loadError && <p className="load-state" role="alert">Falha ao carregar a arena. Tente jogar novamente.</p>}
     <div hidden={!started} className="match">
-    <header className="masthead"><a className="brand" href="#arena">NEON<span>SWARM</span></a><span className="edition">REBIRTH</span></header>
+    <header className="masthead"><a className="brand" href="#arena" onClick={event => { event.preventDefault(); logoTap(); }}>NEON<span>SWARM</span></a><span className="edition">{testMode ? "MODO TESTE" : "REBIRTH"}</span></header>
     <section className="dashboard" aria-label="Painel da partida">
       <div className="vitals"><span>VIDA <strong data-testid="health">{Math.ceil(p.hp)} / {p.maxHp}</strong></span><meter aria-label="Vida" min={0} max={p.maxHp} value={p.hp} /><span>ENERGIA <strong>{Math.floor(p.energy)} / {p.maxEnergy}</strong></span><meter className="energy" aria-label="Energia" min={0} max={p.maxEnergy} value={p.energy} /></div>
       <div className="metric"><span>NÍVEL</span><strong data-testid="level">{p.level.toString().padStart(2, '0')}</strong><meter aria-label="Experiência até o próximo nível" max={p.xpToNext} value={Math.min(p.xp, p.xpToNext)} /></div>
@@ -250,11 +386,14 @@ export function App() {
         <button type="button" onClick={() => setPortraitDismissed(true)}>Seguir no retrato</button>
       </aside>}
       {(paused || snapshot.phase !== 'playing') && <div className="overlay" onPointerDown={event => event.stopPropagation()}><section className="dialog" aria-label={paused ? 'Jogo pausado' : snapshot.phase === 'upgrade' ? 'Escolha uma melhoria' : 'Fim de partida'}>
-        {paused ? <><p className="eyebrow">SISTEMA EM ESPERA</p><h2>Pausado</h2><p>Respire. A arena espera por você.</p><button ref={primary} className="primary" onClick={resume}>Retomar</button></> : snapshot.phase === 'upgrade' ? <><p className="eyebrow">NÍVEL {p.level}</p><h2>Escolha sua evolução</h2><p>Selecione uma melhoria para continuar.</p><div className="upgrades">{snapshot.upgradeOptions.map((option, index) => <button ref={index === 0 ? primary : undefined} key={option.id} onClick={() => choose(option.id)}><span className="eyebrow">{index + 1} · NÍVEL {option.nextLevel}</span><strong>{option.title}</strong><span>{option.description}</span></button>)}</div></> : <><p className="eyebrow">SINAL ENCERRADO</p><h2>{snapshot.phase === 'victory' ? 'Setor recuperado' : 'Fim de jogo'}</h2><p className="score">{snapshot.score.toLocaleString('pt-BR')} <span>pontos</span></p><p>Onda {snapshot.wave.number} · {clock(snapshot.stats.timeAlive)} · {snapshot.stats.kills} abates</p><p>Recorde: {record.highScore.toLocaleString('pt-BR')} · Melhor onda: {record.bestWave}</p><button ref={primary} className="primary" onClick={begin}>Jogar novamente</button><button className="secondary" onClick={() => { setStarted(false); setPaused(false); }}>Voltar à seleção</button></>}
+        {paused ? <><p className="eyebrow">SISTEMA EM ESPERA</p><h2>Pausado</h2><p>Respire. A arena espera por você.</p>{qualitySelect}<button ref={primary} className="primary" onClick={resume}>Retomar</button></> : snapshot.phase === 'upgrade' ? <><p className="eyebrow">NÍVEL {p.level}</p><h2>Escolha sua evolução</h2><p>Selecione uma melhoria para continuar.</p><div className="upgrades">{snapshot.upgradeOptions.map((option, index) => <button ref={index === 0 ? primary : undefined} key={option.id} onClick={() => choose(option.id)}><span className="eyebrow">{index + 1} · NÍVEL {option.nextLevel}</span><strong>{option.title}</strong><span>{option.description}</span></button>)}</div></> : <><p className="eyebrow">SINAL ENCERRADO</p><h2>{snapshot.phase === 'victory' ? 'Setor recuperado' : 'Fim de jogo'}</h2><p className="score">{snapshot.score.toLocaleString('pt-BR')} <span>pontos</span></p><p>Onda {snapshot.wave.number} · {clock(snapshot.stats.timeAlive)} · {snapshot.stats.kills} abates</p><p>Recorde: {record.highScore.toLocaleString('pt-BR')} · Melhor onda: {record.bestWave}</p><button ref={primary} className="primary" onClick={() => { void begin(); }}>Jogar novamente</button><button className="secondary" onClick={() => { setStarted(false); setPaused(false); }}>Voltar à seleção</button></>}
       </section></div>}
     </div>
     <footer className="toolbar"><div><span className="status-dot" />{paused ? 'PAUSADO' : snapshot.phase === 'upgrade' ? 'EVOLUÇÃO DISPONÍVEL' : snapshot.phase === 'gameover' ? 'PARTIDA ENCERRADA' : `PONTOS ${snapshot.score.toLocaleString('pt-BR')}`}</div><div className="actions"><button disabled={!active} onClick={() => { pulse.current = true; field.current?.focus(); }}>Pulso <kbd>Espaço</kbd></button><button aria-label={paused ? 'Retomar' : 'Pausar'} disabled={!started || snapshot.phase !== 'playing'} onClick={() => { clearInput(); if (paused) resume(); else setPaused(true); }}>{paused ? 'Retomar' : 'Pausar'} <kbd>P</kbd></button></div></footer>
     <div className="preferences"><span>WASD / setas · arraste para mover · 1–3 para evoluir</span><label><input type="checkbox" checked={reduced} onChange={event => { setReduced(event.target.checked); saveMotion(event.target.checked); }} /> Reduzir efeitos</label></div>
     </div>
+    {fpsShown && <output className="performance-display" aria-label="Desempenho">{fps} FPS</output>}
+    {developerOpen && <DeveloperPanel state={snapshot} onAction={handleDeveloperAction} onClose={closeDeveloper}
+      unlocked={false} onUnlock={() => {}} />}
   </main>;
 }

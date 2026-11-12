@@ -726,7 +726,7 @@ function updateProjectiles(state: GameState, dt: number): void {
   const margin = PROJECTILE_MARGIN;
 
   for (const projectile of state.projectiles) {
-    if (projectile.ttl <= 0) continue;
+    if (projectile.ttl <= 0 || (state.run?.freezeEnemies && projectile.owner === 'enemy')) continue;
 
     projectile.pos.x += projectile.vel.x * dt;
     projectile.pos.y += projectile.vel.y * dt;
@@ -1067,7 +1067,7 @@ function simulate(state: GameState, move: Vec2, pulse: boolean, dt: number): voi
     updateEncounter(state, dt);
     if (state.phase !== 'playing') return;
   } else updateWave(state, dt);
-  updateEnemies(state, dt);
+  if (!state.run?.freezeEnemies) updateEnemies(state, dt);
 
   // Mira automática no inimigo mais próximo (mesmo antes de atirar).
   let nearest: Enemy | null = null;
@@ -1100,7 +1100,7 @@ function simulate(state: GameState, move: Vec2, pulse: boolean, dt: number): voi
   maybeLevelUp(state);
   if (state.phase !== 'playing') return;
 
-  updateContactDamage(state);
+  if (!state.run?.freezeEnemies) updateContactDamage(state);
   if (state.phase !== 'playing') return;
 
   // Segurança: se por algum motivo a fase mudou, o estado fica estável.

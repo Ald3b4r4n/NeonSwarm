@@ -38,7 +38,7 @@ export interface RebirthRun extends RunConfig {
   bossDefeated: boolean;
   ranks: Partial<Record<WeaponId, number>>;
   cooldowns: Partial<Record<WeaponId, number>>;
-  mines: { pos: Vec2; fuse: number; radius: number; damage: number }[];
+  mines: { pos: Vec2; fuse: number; radius: number; damage: number; rank?: number }[];
 }
 export type UpgradeId =
   | `weapon-${WeaponId}`
@@ -98,6 +98,7 @@ export interface Projectile {
   id: number;
   owner: 'player' | 'enemy';
   weapon?: WeaponId;
+  rank?: number;
   pos: Vec2;
   vel: Vec2;
   radius: number;
@@ -151,6 +152,9 @@ export interface Impact {
   kind: 'hit' | 'kill' | 'playerHurt' | 'pickup' | 'pulse' | 'levelUp' | 'blast' | 'arc';
   radius?: number;
   from?: Vec2;
+  rank?: number;
+  weapon?: WeaponId;
+  variant?: EnemyVariant;
   pos: Vec2;
   ttl: number;
   maxTtl: number;

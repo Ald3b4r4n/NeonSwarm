@@ -16,21 +16,43 @@ function halo(ctx: CanvasRenderingContext2D, pos: Vec2, radius: number, color: s
   ctx.stroke();
 }
 
-function sprite(ctx: CanvasRenderingContext2D, image: HTMLImageElement, pos: Vec2, height: number, time: number, velocity: Vec2, hurt: boolean) {
-  const width = height * image.naturalWidth / image.naturalHeight;
-  const motion = Math.min(1, Math.hypot(velocity.x, velocity.y) / 65);
-  const stride = Math.sin(time * 15) * motion;
+function sprite(ctx: CanvasRenderingContext2D, atlas: HTMLImageElement, pos: Vec2, size: number,
+  time: number, velocity: Vec2, row: number, progress?: number) {
+  const cell = 96;
+  const index = progress === undefined ? Math.floor(time * (row === 1 ? 12 : 8)) % 4
+    : Math.min(3, Math.max(0, Math.floor(progress * 4)));
   ctx.fillStyle = '#06090bb0';
   ctx.beginPath();
-  ctx.ellipse(pos.x, pos.y + height * .26, width * .37, height * .12, 0, 0, Math.PI * 2);
+  ctx.ellipse(pos.x, pos.y + size * .22, size * .25, size * .095, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.save();
-  ctx.translate(pos.x, pos.y + stride * 2);
-  ctx.rotate(stride * .045);
+  ctx.translate(pos.x, pos.y);
   if (velocity.x < -8) ctx.scale(-1, 1);
-  if (hurt) ctx.globalAlpha = .62;
-  ctx.drawImage(image, -width / 2, -height * .65, width, height);
+  ctx.drawImage(atlas, index * cell, row * cell, cell, cell, -size / 2, -size * .64, size, size);
   ctx.restore();
+}
+
+function streak(ctx: CanvasRenderingContext2D, x: number, y: number, dx: number, dy: number,
+  rank: number, color: string, type: WeaponId | undefined, reduced: boolean) {
+  const length = Math.hypot(dx, dy) || 1;
+  const px = -dy / length, py = dx / length;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = type === 'lance' ? 3.5 : 2.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - dx, y - dy);
+  if (type === 'coil' && rank >= 2) ctx.lineTo(x - dx * .5 + px * 5, y - dy * .5 + py * 5);
+  ctx.lineTo(x, y);
+  if (!reduced && rank >= 3) {
+    ctx.moveTo(x - dx * .72, y - dy * .72);
+    ctx.lineTo(x - dx * .35 - px * 8, y - dy * .35 - py * 8);
+    if (rank >= 4) {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - dx * .55 + px * 10, y - dy * .55 + py * 10);
+    }
+  }
+  ctx.stroke();
+  if (rank === 5) halo(ctx, { x, y }, type === 'scatter' ? 4 : 6, '#efffff', 1.3);
 }
 
 export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art: ArenaArt, reduced: boolean) {
@@ -43,14 +65,9 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   ctx.fillRect(0, 0, W, H);
   for (const obstacle of BIOMES[run.biome].obstacles) {
     const { x, y, radius } = obstacle;
-    ctx.fillStyle = '#09131a';
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    halo(ctx, obstacle, radius - 1, run.biome === 'station' ? '#70c9d7a0' : '#f99d74a0', 2);
-    halo(ctx, obstacle, radius - 6, '#edffff30', 1);
-    ctx.fillStyle = run.biome === 'station' ? '#3b666e' : '#765445';
-    ctx.fillRect(x - radius * .48, y - 2, radius * .96, 4);
+    halo(ctx, obstacle, radius - 1, run.biome === 'station' ? '#70c9d780' : '#f99d7480', 1.5);
+    const tile = Math.floor(time * 4 + x) % 4;
+    ctx.drawImage(art.decoration, tile * 96, 0, 96, 96, x - radius * 1.45, y - radius * 1.55, radius * 2.9, radius * 2.9);
   }
 
   ctx.fillStyle = '#91ffb7';
@@ -80,7 +97,12 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
         ctx.stroke();
       }
     }
-    sprite(ctx, art.sprites[kind], enemy.pos, enemy.radius * (kind === 'queen' ? 3.7 : 3.3), time + enemy.id, enemy.vel, enemy.hitFlash > 0);
+    const pattern = kind === 'queen' ? bossPattern(state.time, enemy.hp / enemy.maxHp) : undefined;
+    const special = pattern && (state.time < 661 || enemy.fireCooldown < pattern.telegraphTime);
+    const firing = enemy.kind === 'shooter' && enemy.fireCooldown > 1.7 && enemy.fireCooldown < 2.15;
+    const row = enemy.hitFlash > 0 ? 3 : special ? 5 : firing ? 2 : Math.hypot(enemy.vel.x, enemy.vel.y) > 10 ? 1 : 0;
+    sprite(ctx, art.animation[kind], enemy.pos, enemy.radius * (kind === 'queen' ? 4.7 : 4.2),
+      time + enemy.id * .077, enemy.vel, row);
   }
 
   if (run.ranks.orbit) {
@@ -100,21 +122,27 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
     }
   }
   halo(ctx, player.pos, player.radius + 8, '#71f8ff80', 2);
-  sprite(ctx, art.sprites[run.character], player.pos, 65, time, run.move, player.invuln > 0 && Math.sin(state.time * 31) > 0);
+  const casting = state.impacts.some(effect => effect.kind === 'pulse' && effect.ttl > .2);
+  const attacking = state.projectiles.some(shot => shot.owner === 'player' &&
+    Math.abs(shot.pos.x - player.pos.x) + Math.abs(shot.pos.y - player.pos.y) < 38);
+  const motion = Math.hypot(run.move.x, run.move.y);
+  const playerRow = state.phase === 'gameover' ? 4 : player.invuln > .62 ? 3 : casting ? 5 : attacking ? 2 : motion > 8 ? 1 : 0;
+  sprite(ctx, art.animation[run.character], player.pos, 83, time, motion > 8 ? run.move : { x: player.aim.x * 40, y: 0 },
+    playerRow, playerRow === 4 ? .99 : undefined);
   for (const bolt of state.projectiles) {
     const color = bolt.owner === 'enemy' ? '#ff82a6' : weaponColors[bolt.weapon ?? 'coil'];
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(2, bolt.radius * .8);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(bolt.pos.x - bolt.vel.x * .025, bolt.pos.y - bolt.vel.y * .025);
-    ctx.lineTo(bolt.pos.x, bolt.pos.y);
-    ctx.stroke();
+    streak(ctx, bolt.pos.x, bolt.pos.y, bolt.vel.x * .026, bolt.vel.y * .026,
+      bolt.rank ?? 1, color, bolt.weapon, reduced);
   }
   for (const impact of state.impacts) {
     const progress = 1 - impact.ttl / impact.maxTtl;
     if (reduced && impact.kind !== 'blast' && impact.kind !== 'pulse' && impact.kind !== 'arc') continue;
     ctx.globalAlpha = Math.max(0, 1 - progress);
+    const rank = impact.rank ?? 1;
+    if (impact.kind === 'kill' && impact.variant) {
+      sprite(ctx, art.animation[impact.variant], impact.pos, impact.variant === 'queen' ? 170 : 59,
+        time, { x: 0, y: 0 }, 4, progress);
+    }
     if (impact.kind === 'arc' && impact.from) {
       const dx = impact.pos.x - impact.from.x;
       const dy = impact.pos.y - impact.from.y;
@@ -124,10 +152,31 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
       ctx.moveTo(impact.from.x, impact.from.y);
       ctx.lineTo(impact.from.x + dx * .4 - dy * .15, impact.from.y + dy * .4 + dx * .15);
       ctx.lineTo(impact.pos.x, impact.pos.y);
+      if (rank >= 3 && !reduced) {
+        ctx.moveTo(impact.from.x + dx * .4 - dy * .15, impact.from.y + dy * .4 + dx * .15);
+        ctx.lineTo(impact.from.x + dx * .7 + dy * .18, impact.from.y + dy * .7 - dx * .18);
+      }
       ctx.stroke();
+      if (rank >= 4) halo(ctx, impact.pos, 6 + progress * 12, '#caa1ff', 2);
+      if (rank >= 5) halo(ctx, impact.pos, 11 + progress * 22, '#f6e6ff', 1);
     } else {
       halo(ctx, impact.pos, 5 + progress * (impact.radius ?? (impact.kind === 'pulse' ? 160 : 28)),
         impact.kind === 'playerHurt' ? '#ff557c' : impact.kind === 'blast' ? '#ffd391' : '#83f4ff', 2.5);
+      if ((impact.kind === 'blast' || impact.kind === 'pulse') && rank >= 2) {
+        const radius = 6 + progress * (impact.radius ?? 144);
+        halo(ctx, impact.pos, radius * .7, impact.weapon === 'orbit' ? '#87ffba' : '#ffe3ba', 1.3);
+        if (rank >= 3 && !reduced) {
+          ctx.fillStyle = impact.kind === 'pulse' ? '#b9f9ff' : '#ffd291';
+          for (let i = 0; i < rank * 2; i++) {
+            const angle = i * Math.PI / rank + impact.id;
+            const x = impact.pos.x + Math.cos(angle) * radius;
+            const y = impact.pos.y + Math.sin(angle) * radius;
+            ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+          }
+        }
+        if (rank >= 4) halo(ctx, impact.pos, radius * .43, '#f5f8ff', 1.7);
+        if (rank === 5) halo(ctx, impact.pos, radius * 1.16, '#d9ecff', 1);
+      }
     }
   }
   ctx.globalAlpha = 1;

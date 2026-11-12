@@ -355,6 +355,11 @@ function killEnemyAt(state: GameState, index: number): void {
   state.score += scoreForKill(enemy.kind, state.wave.number);
   dropOrb(state, enemy.pos, enemy.xpValue * (state.run ? 2 : 1));
   addImpact(state, 'kill', enemy.pos, enemy.kind);
+  if (enemy.variant) {
+    const effect = state.impacts[state.impacts.length - 1];
+    effect.variant = enemy.variant;
+    effect.ttl = effect.maxTtl = enemy.variant === 'queen' ? .95 : .42;
+  }
 }
 
 /** Aplica dano em um inimigo por índice. Retorna true se ele morreu. */
@@ -593,12 +598,14 @@ function updatePlayer(state: GameState, move: Vec2, pulse: boolean, dt: number):
   }
   if (pulse && player.energy >= PULSE_COST) {
     player.energy -= PULSE_COST;
+    const pulseRank = state.run ? Math.min(5, 1 + Math.floor((player.level - 1) / 5)) : 1;
+    const pulseRadius = PULSE_RADIUS + (pulseRank - 1) * 5;
     const pulseDamage =
-      PULSE_BASE_DAMAGE + player.level * 2 + player.stats.damage * 0.35;
+      PULSE_BASE_DAMAGE + player.level * 2 + player.stats.damage * 0.35 + (pulseRank - 1) * 3;
 
     for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
       const enemy = state.enemies[i] as Enemy;
-      if (distance(player.pos, enemy.pos) <= PULSE_RADIUS + enemy.radius) {
+      if (distance(player.pos, enemy.pos) <= pulseRadius + enemy.radius) {
         const dir = normalize(enemy.pos.x - player.pos.x, enemy.pos.y - player.pos.y);
         hurtEnemyAt(state, i, pulseDamage, false);
         const survivor = state.enemies[i];
@@ -616,13 +623,18 @@ function updatePlayer(state: GameState, move: Vec2, pulse: boolean, dt: number):
     for (const projectile of state.projectiles) {
       if (
         projectile.owner === 'enemy' &&
-        distance(player.pos, projectile.pos) <= PULSE_RADIUS
+        distance(player.pos, projectile.pos) <= pulseRadius
       ) {
         projectile.ttl = 0;
       }
     }
 
     addImpact(state, 'pulse', player.pos);
+    if (state.run) {
+      const impact = state.impacts[state.impacts.length - 1];
+      impact.rank = pulseRank;
+      impact.radius = pulseRadius;
+    }
   }
 }
 
@@ -918,10 +930,10 @@ function updateQueen(state: GameState, enemy: Enemy, dt: number): void {
   }
 }
 
-function arsenalImpact(state: GameState, kind: 'blast' | 'arc', pos: Vec2, radius?: number, from?: Vec2): void {
+function arsenalImpact(state: GameState, kind: 'blast' | 'arc', pos: Vec2, radius?: number, from?: Vec2, rank?: number, weapon?: WeaponId): void {
   if (state.impacts.length === MAX_IMPACTS) state.impacts.shift();
   state.impacts.push({
-    id: state.nextId++, kind, pos: { ...pos }, radius, from: from && { ...from }, ttl: .24, maxTtl: .24,
+    id: state.nextId++, kind, pos: { ...pos }, radius, from: from && { ...from }, rank, weapon, ttl: .24, maxTtl: .24,
   });
 }
 
@@ -932,7 +944,7 @@ function hitArea(state: GameState, pos: Vec2, radius: number, damage: number): v
   }
 }
 
-function discharge(state: GameState, target: Enemy, start: Vec2, damage: number, jumps: number, radius: number, falloff: number): void {
+function discharge(state: GameState, target: Enemy, start: Vec2, damage: number, jumps: number, radius: number, falloff: number, rank = 1): void {
   let origin = start;
   let enemy: Enemy | undefined = target;
   const seen = new Set<number>();
@@ -940,7 +952,7 @@ function discharge(state: GameState, target: Enemy, start: Vec2, damage: number,
     const index = state.enemies.indexOf(enemy);
     if (index < 0) break;
     seen.add(enemy.id);
-    arsenalImpact(state, 'arc', enemy.pos, undefined, origin);
+    arsenalImpact(state, 'arc', enemy.pos, undefined, origin, rank, 'arc');
     origin = enemy.pos;
     hurtEnemyAt(state, index, damage);
     damage *= falloff;
@@ -964,7 +976,7 @@ function updateArsenal(state: GameState, target: Enemy | null, dt: number): void
     mine.fuse -= dt;
     if (mine.fuse > 0) return true;
     hitArea(state, mine.pos, mine.radius, mine.damage);
-    arsenalImpact(state, 'blast', mine.pos, mine.radius);
+    arsenalImpact(state, 'blast', mine.pos, mine.radius, undefined, mine.rank, 'mine');
     return false;
   });
   const aim = Math.atan2(player.aim.y, player.aim.x);
@@ -990,10 +1002,10 @@ function updateArsenal(state: GameState, target: Enemy | null, dt: number): void
           if (state.projectiles.length >= MAX_PROJECTILES) break;
           const speed = attack.projectileSpeed;
           state.projectiles.push({
-            id: state.nextId++, owner: 'player', weapon: id, pos: { ...player.pos },
+            id: state.nextId++, owner: 'player', weapon: id, rank: attack.rank, pos: { ...player.pos },
             vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
             radius: attack.type === 'pierce' ? attack.beamWidth : 4, damage,
-            pierceLeft: attack.pierce + player.stats.pierce + (evolution?.effect.kind === 'pierceBonus' ? evolution.effect.extraPierce : 0),
+            pierceLeft: attack.pierce + (id === 'coil' ? Math.floor(attack.rank / 3) : 0) + player.stats.pierce + (evolution?.effect.kind === 'pierceBonus' ? evolution.effect.extraPierce : 0),
             ttl: range / speed, hitIds: [],
           });
           state.stats.shotsFired++;
@@ -1004,7 +1016,7 @@ function updateArsenal(state: GameState, target: Enemy | null, dt: number): void
         for (const angle of attack.orbAngles) {
           const pos = { x: player.pos.x + Math.cos(angle) * attack.orbitRadius, y: player.pos.y + Math.sin(angle) * attack.orbitRadius };
           hitArea(state, pos, attack.orbRadius * 1.45, damage);
-          arsenalImpact(state, 'blast', pos, attack.orbRadius);
+          arsenalImpact(state, 'blast', pos, attack.orbRadius, undefined, attack.rank, 'orbit');
           const storm = weaponEvolution('arc', run.ranks)?.result.effect;
           if (storm?.kind === 'chainOnHit') {
             const close = state.enemies.find(enemy => distanceSq(pos, enemy.pos) < (attack.orbRadius * 2) ** 2);
@@ -1019,11 +1031,11 @@ function updateArsenal(state: GameState, target: Enemy | null, dt: number): void
             x: clamp(player.pos.x + Math.cos(angle) * attack.dropDistance, 12, ARENA_WIDTH - 12),
             y: clamp(player.pos.y + Math.sin(angle) * attack.dropDistance, 12, ARENA_HEIGHT - 12),
           };
-          run.mines.push({ pos, fuse: attack.fuse, radius: attack.blastRadius, damage });
+          run.mines.push({ pos, fuse: attack.fuse, radius: attack.blastRadius, damage, rank: attack.rank });
         }
         break;
       case 'chain':
-        discharge(state, target, player.pos, damage, attack.chainJumps, attack.chainRange, attack.chainFalloff);
+        discharge(state, target, player.pos, damage, attack.chainJumps, attack.chainRange, attack.chainFalloff, attack.rank);
         break;
     }
   }

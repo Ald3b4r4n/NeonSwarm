@@ -122,7 +122,7 @@ test('a partida progride, oferece upgrades, causa dano e salva o recorde após a
 
 test('a seleção informa falha de asset e permite tentar novamente', async ({ page }) => {
   await page.goto('./');
-  await page.route('**/art/queen.webp', route => route.abort(), { times: 1 });
+  await page.route('**/art/animated/queen.webp', route => route.abort(), { times: 1 });
   await page.getByRole('button', { name: /^jogar$/i }).click();
   await expect(page.getByRole('alert')).toContainText('Falha ao carregar a arena');
   await expect(page.getByTestId('arena')).toBeHidden();

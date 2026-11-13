@@ -3,7 +3,8 @@ import { DeveloperPanel } from './developer-panel.js';
 import { QUALITY_PRESETS, readQuality, saveQuality, type FixedQuality, type Quality } from './quality.js';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { createGame, stepGame, applyUpgrade } from '../game/engine.js';
-import { ARENA_HEIGHT, ARENA_WIDTH, type GameState, type UpgradeId, type CharacterId, type BiomeId, type WeaponId } from '../game/contracts.js';
+import { type GameState, type UpgradeId, type CharacterId, type BiomeId, type WeaponId } from '../game/contracts.js';
+import { stationSector } from '../game/ion-station.js';
 import { drawRebirth } from './rebirth-render.js';
 import { artUrl, loadArenaArt, type ArenaArt } from './rebirth-art.js';
 import { LaunchScreen } from './rebirth-shell.js';
@@ -17,7 +18,7 @@ const characters = [
   { id: 'rook', name: 'Rook', description: 'Engenheiro blindado. Começa com a Dispersora.', image: artUrl('rook') },
 ];
 const biomes = [
-  { id: 'station', name: 'Estação Íon', description: 'Trilhos partidos, chuva e passagens abertas.', image: artUrl('station') },
+  { id: 'station', name: 'Estação Íon', description: 'Doze setores conectados por trilhos e passagens de serviço.', image: artUrl('station') },
   { id: 'nursery', name: 'Viveiro Rubro', description: 'Laboratório tomado por esporos e feras.', image: artUrl('nursery') },
 ];
 
@@ -74,7 +75,7 @@ export function App() {
     try {
       const chosen = options ? { ...selected.current } : { character, biome };
       art.current = await loadArenaArt(chosen.biome);
-      game.current = createGame(Date.now() >>> 0, chosen);
+      game.current = createGame(Date.now() >>> 0, { ...chosen, expedition: chosen.biome === 'station' });
       if (options && "weapon" in chosen && chosen.weapon) {
         game.current = applyDeveloperAction(game.current, { type: 'weapon/set-rank', weapon: chosen.weapon, rank: 1 });
       }
@@ -207,11 +208,11 @@ export function App() {
     let automatic: FixedQuality = 'medium';
     let applied: FixedQuality | undefined;
     const resize = () => {
-      const width = node.getBoundingClientRect().width;
+      const { width, height } = node.getBoundingClientRect();
       applied = controls.current.quality === 'auto' ? automatic : controls.current.quality;
       const dpr = Math.min(window.devicePixelRatio || 1, QUALITY_PRESETS[applied].dpr);
       const pixelWidth = Math.max(1, Math.round(width * dpr));
-      const pixelHeight = Math.max(1, Math.round(width * ARENA_HEIGHT / ARENA_WIDTH * dpr));
+      const pixelHeight = Math.max(1, Math.round(height * dpr));
       if (node.width !== pixelWidth) node.width = pixelWidth;
       if (node.height !== pixelHeight) node.height = pixelHeight;
     };
@@ -358,7 +359,7 @@ export function App() {
     {!started && qualitySelect}
     {loading && <p className="load-state" role="status">Carregando ilustrações da arena…</p>}
     {loadError && <p className="load-state" role="alert">Falha ao carregar a arena. Tente jogar novamente.</p>}
-    <div hidden={!started} className="match">
+    <div hidden={!started} className={snapshot.run?.expedition ? 'match expedition' : 'match'}>
     <header className="masthead"><a className="brand" href="#arena" onClick={event => { event.preventDefault(); logoTap(); }}>NEON<span>SWARM</span></a><span className={testMode ? "edition test-edition" : "edition"}>{testMode ? "MODO TESTE" : "REBIRTH"}</span></header>
     <section className="dashboard" aria-label="Painel da partida">
       <div className="vitals"><span>VIDA <strong data-testid="health">{Math.ceil(p.hp)} / {p.maxHp}</strong></span><meter aria-label="Vida" min={0} max={p.maxHp} value={p.hp} /><span>ENERGIA <strong>{Math.floor(p.energy)} / {p.maxEnergy}</strong></span><meter className="energy" aria-label="Energia" min={0} max={p.maxEnergy} value={p.energy} /></div>
@@ -377,6 +378,7 @@ export function App() {
     </section>}
     <div id="arena" ref={field} className={`arena ${active ? 'active' : ''}`} tabIndex={0} aria-label="Campo de jogo" data-player-x={p.pos.x} data-player-y={p.pos.y} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onLostPointerCapture={pointerEnd}>
       <canvas ref={canvas} aria-label="Arena" data-testid="arena" data-player-x={p.pos.x} data-player-y={p.pos.y} width={960} height={720}>Arena de NEON SWARM. Use WASD ou setas para mover e Espaço para pulso.</canvas>
+      {snapshot.run?.expedition && <div className="station-sector" data-testid="station-sector">{stationSector(p.pos.x, p.pos.y)}</div>}
       <div className="virtual-controls" data-testid="virtual-controls" aria-label="Controles por toque">
         <div className={`virtual-joystick ${active ? '' : 'disabled'}`} role="group" aria-label="Joystick virtual" onPointerDown={joystickDown} onPointerMove={joystickMove} onPointerUp={joystickEnd} onPointerCancel={joystickEnd} onLostPointerCapture={joystickEnd}>
           <span className="joystick-ring" />

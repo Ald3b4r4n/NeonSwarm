@@ -180,3 +180,23 @@
   .match .masthead:has(.test-edition) { display: grid; gap: 2px; }
   .match .test-edition { font-size: 9px; white-space: nowrap; }
 }
+.match.expedition .arena canvas {
+  width: 100%;
+  height: min(70dvh, 720px);
+  aspect-ratio: auto;
+}
+.station-sector {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 5px 8px;
+  border: 1px solid #456579;
+  background: #0a1423e8;
+  color: #d0e5f0;
+  font-size: 11px;
+  pointer-events: none;
+}
+@media (orientation: landscape) and (pointer: coarse) {
+  .match.expedition .arena canvas { height: 100dvh; }
+  .station-sector { top: max(64px, calc(env(safe-area-inset-top) + 54px)); }
+}

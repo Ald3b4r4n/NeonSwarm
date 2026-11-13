@@ -2,6 +2,7 @@ import { ARENA_WIDTH as W, ARENA_HEIGHT as H, type GameState, type Vec2, type We
 import { makeWeaponAttack } from '../game/rebirth-weapons.js';
 import { BIOMES, bossPattern } from '../game/rebirth-encounters.js';
 import type { ArenaArt } from './rebirth-art.js';
+import { drawStation, drawStationMap } from './ion-terrain.js';
 
 const weaponColors: Record<WeaponId, string> = {
   coil: '#75f6ff', scatter: '#ffd291', lance: '#a8f9ff',
@@ -63,11 +64,27 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   const { run, player } = state;
   if (!run) return;
   const time = reduced ? 0 : state.time;
-  ctx.setTransform(ctx.canvas.width / W, 0, 0, ctx.canvas.height / H, 0, 0);
-  ctx.drawImage(art.terrain, 0, 0, W, H);
-  ctx.fillStyle = '#080d1870';
-  ctx.fillRect(0, 0, W, H);
-  for (const obstacle of BIOMES[run.biome].obstacles) {
+  const bounds = state.bounds;
+  const scale = Math.max(ctx.canvas.height / 490, ctx.canvas.width / 1060);
+  const w = ctx.canvas.width / scale;
+  const h = ctx.canvas.height / scale;
+  const view = {
+    x: Math.max(0, Math.min(bounds.w - w, player.pos.x - w / 2)),
+    y: Math.max(0, Math.min(bounds.h - h, player.pos.y - h / 2)),
+    w, h,
+  };
+  const visible = (pos: Vec2, pad = 70) => pos.x >= view.x - pad && pos.x <= view.x + view.w + pad &&
+    pos.y >= view.y - pad && pos.y <= view.y + view.h + pad;
+  if (run.expedition) {
+    ctx.setTransform(scale, 0, 0, scale, -view.x * scale, -view.y * scale);
+    drawStation(ctx, view);
+  } else {
+    ctx.setTransform(ctx.canvas.width / W, 0, 0, ctx.canvas.height / H, 0, 0);
+    ctx.drawImage(art.terrain, 0, 0, W, H);
+    ctx.fillStyle = '#080d1870';
+    ctx.fillRect(0, 0, W, H);
+  }
+  for (const obstacle of run.expedition ? [] : BIOMES[run.biome].obstacles) {
     const { x, y, radius } = obstacle;
     halo(ctx, obstacle, radius - 1, run.biome === 'station' ? '#70c9d780' : '#f99d7480', 1.5);
     const tile = Math.floor(time * 4 + x) % 4;
@@ -77,6 +94,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   ctx.fillStyle = '#91ffb7';
   ctx.beginPath();
   for (const { pos } of state.orbs) {
+    if (run.expedition && !visible(pos)) continue;
     ctx.moveTo(pos.x + 4, pos.y);
     ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
   }
@@ -87,6 +105,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   }
 
   for (const enemy of state.enemies) {
+    if (run.expedition && !visible(enemy.pos, enemy.radius * 3)) continue;
     const kind = enemy.variant ?? enemy.kind;
     if (kind === 'queen') {
       const pattern = bossPattern(state.time, enemy.hp / enemy.maxHp);
@@ -141,6 +160,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   sprite(ctx, art.animation[run.character], player.pos, 96, state.time, motion > 8 ? run.move : { x: player.aim.x * 40, y: 0 },
     playerRow, playerRow === 4 ? deathProgress : undefined);
   for (const bolt of state.projectiles) {
+    if (run.expedition && !visible(bolt.pos)) continue;
     const color = bolt.owner === 'enemy' ? '#ff82a6' : weaponColors[bolt.weapon ?? 'coil'];
     streak(ctx, bolt.pos.x, bolt.pos.y, bolt.vel.x * .026, bolt.vel.y * .026,
       bolt.rank ?? 1, color, bolt.weapon, reduced);
@@ -157,7 +177,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
     if (impact.kind === 'arc' && impact.from) {
       const dx = impact.pos.x - impact.from.x;
       const dy = impact.pos.y - impact.from.y;
-      ctx.strokeStyle = '#e0c4ff';
+      ctx.strokeStyle = impact.weapon === 'coil' ? '#9dffff' : '#e0c4ff';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(impact.from.x, impact.from.y);
@@ -195,4 +215,5 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
     }
   }
   ctx.globalAlpha = 1;
+  if (run.expedition) drawStationMap(ctx, view, player.pos);
 }

@@ -1,4 +1,5 @@
 import { BIOMES, CHARACTERS, ENEMIES, EXTRACTION_DEADLINE, RUN_SECONDS, bossPattern, encounterAt } from './rebirth-encounters.js';
+import { ION_STATION, STATION_OBSTACLES } from './ion-station.js';
 import { WEAPONS, WEAPON_IDS, makeWeaponAttack, weaponEvolution } from './rebirth-weapons.js';
 /**
  * Motor puro do NEON SWARM.
@@ -10,8 +11,6 @@ import { WEAPONS, WEAPON_IDS, makeWeaponAttack, weaponEvolution } from './rebirt
  */
 import {
   ARENA_BOUNDS,
-  ARENA_HEIGHT,
-  ARENA_WIDTH,
   MAX_DT,
   MAX_UPGRADE_OPTIONS,
   type Enemy,
@@ -870,7 +869,8 @@ function initializeRebirth(state: GameState, config: RunConfig): void {
 
 function separateObstacles(state: GameState, pos: Vec2, radius: number): void {
   if (!state.run) return;
-  for (const obstacle of BIOMES[state.run.biome].obstacles) {
+  const obstacles = state.run.expedition ? STATION_OBSTACLES : BIOMES[state.run.biome].obstacles;
+  for (const obstacle of obstacles) {
     const dx = pos.x - obstacle.x;
     const dy = pos.y - obstacle.y;
     const minimum = radius + obstacle.radius;
@@ -880,8 +880,8 @@ function separateObstacles(state: GameState, pos: Vec2, radius: number): void {
     pos.x = obstacle.x + (length ? dx / length : 1) * minimum;
     pos.y = obstacle.y + (length ? dy / length : 0) * minimum;
     if (pos === state.player.pos) {
-      pos.x = clamp(pos.x, radius, ARENA_WIDTH - radius);
-      pos.y = clamp(pos.y, radius, ARENA_HEIGHT - radius);
+      pos.x = clamp(pos.x, radius, state.bounds.w - radius);
+      pos.y = clamp(pos.y, radius, state.bounds.h - radius);
     }
   }
 }
@@ -893,7 +893,23 @@ function spawnRebirthEnemy(state: GameState, variant: EnemyVariant, scale: numbe
   const kind: EnemyKind = variant === 'spore' || variant === 'shooter' ? 'shooter'
     : variant === 'brute' || variant === 'elite' || variant === 'queen' ? 'brute' : 'drone';
   const maxHp = Math.round(def.hp * scale);
-  const pos = variant === 'queen' ? { x: 480, y: 75 } : chooseSpawnPoint(state, def.radius);
+  let pos: Vec2;
+  if (state.run?.expedition) {
+    const distance = variant === 'queen' ? 420 : randomRange(state, 370, 490);
+    const angle = randomRange(state, 0, Math.PI * 2);
+    const { x, y } = state.player.pos;
+    const dx = Math.cos(angle) * distance;
+    const dy = Math.sin(angle) * distance;
+    const { w, h } = state.bounds;
+    // Reflect spawn directions at the perimeter so a horde never appears on the player.
+    pos = {
+      x: clamp(x + (x + dx < def.radius || x + dx > w - def.radius ? -dx : dx), def.radius, w - def.radius),
+      y: clamp(y + (y + dy < def.radius || y + dy > h - def.radius ? -dy : dy), def.radius, h - def.radius),
+    };
+    separateObstacles(state, pos, def.radius);
+  } else {
+    pos = variant === 'queen' ? { x: 480, y: 75 } : chooseSpawnPoint(state, def.radius);
+  }
   state.enemies.push({
     id: state.nextId++, kind, variant, pos, vel: { x: 0, y: 0 }, radius: def.radius,
     hp: maxHp, maxHp, speed: def.speed,
@@ -925,11 +941,11 @@ function updateEncounter(state: GameState, dt: number): void {
     : encounter.kind === 'spore' && state.time < 145 && run.spawnIndex % (state.time < 90 ? 6 : 4) !== 0 ? 'drone'
     : encounter.kind === 'shooter' && state.time < 300 && run.spawnIndex % 4 !== 0 ? 'drone' : encounter.kind;
   spawnRebirthEnemy(state, variant, encounter.scale);
-  if (state.time > 275 && !run.bossSpawned) {
+  if (state.time > (run.expedition ? 30 : 275) && !run.bossSpawned) {
     spawnRebirthEnemy(state, run.spawnIndex % 3 ? 'drone' : 'hound', encounter.scale);
-    if (state.time > 505) spawnRebirthEnemy(state, 'hound', encounter.scale);
+    if (state.time > (run.expedition ? 135 : 505)) spawnRebirthEnemy(state, 'hound', encounter.scale);
   }
-  state.wave.spawnTimer = encounter.cadence * (state.time < 110 ? .72 : 1) * (run.bossSpawned ? 1.8 : 1);
+  state.wave.spawnTimer = encounter.cadence * (run.expedition || state.time < 110 ? .72 : 1) * (run.bossSpawned ? 1.8 : 1);
 }
 
 function finishBossEncounter(state: GameState): boolean {
@@ -947,8 +963,8 @@ function updateQueen(state: GameState, enemy: Enemy, dt: number): void {
   const speed = enemy.fireCooldown < pattern.telegraphTime ? pattern.speed * .22 : pattern.speed;
   enemy.vel.x = direction.x * speed;
   enemy.vel.y = direction.y * speed;
-  enemy.pos.x = clamp(enemy.pos.x + enemy.vel.x * dt, enemy.radius, ARENA_WIDTH - enemy.radius);
-  enemy.pos.y = clamp(enemy.pos.y + enemy.vel.y * dt, enemy.radius, ARENA_HEIGHT - enemy.radius);
+  enemy.pos.x = clamp(enemy.pos.x + enemy.vel.x * dt, enemy.radius, state.bounds.w - enemy.radius);
+  enemy.pos.y = clamp(enemy.pos.y + enemy.vel.y * dt, enemy.radius, state.bounds.h - enemy.radius);
   if (enemy.fireCooldown > 0) return;
   enemy.fireCooldown = pattern.cooldown;
   enemy.attackUntil = state.time + .45;
@@ -1069,8 +1085,8 @@ function updateArsenal(state: GameState, target: Enemy | null, dt: number): void
         for (let i = 0; i < attack.count && run.mines.length < 30; i++) {
           const angle = attack.dropAngle + i * .34;
           const pos = {
-            x: clamp(player.pos.x + Math.cos(angle) * attack.dropDistance, 12, ARENA_WIDTH - 12),
-            y: clamp(player.pos.y + Math.sin(angle) * attack.dropDistance, 12, ARENA_HEIGHT - 12),
+            x: clamp(player.pos.x + Math.cos(angle) * attack.dropDistance, 12, state.bounds.w - 12),
+            y: clamp(player.pos.y + Math.sin(angle) * attack.dropDistance, 12, state.bounds.h - 12),
           };
           run.mines.push({ pos, fuse: attack.fuse, radius: attack.blastRadius, damage, rank: attack.rank });
         }
@@ -1154,15 +1170,16 @@ export function createGame(seed: number = DEFAULT_SEED, config?: RunConfig): Gam
   const normalizedSeed = Number.isFinite(seed) ? Math.abs(Math.trunc(seed)) >>> 0 : DEFAULT_SEED;
   const rng = normalizedSeed === 0 ? 0x9e3779b9 : normalizedSeed;
   const maxHp = PLAYER_START_HP;
+  const bounds = config?.expedition && config.biome === 'station' ? ION_STATION : ARENA_BOUNDS;
 
   const state: GameState = {
     seed: normalizedSeed,
     rng,
     phase: 'playing',
     time: 0,
-    bounds: { ...ARENA_BOUNDS },
+    bounds: { ...bounds },
     player: {
-      pos: { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2 },
+      pos: { x: bounds === ION_STATION ? 1152 : bounds.w / 2, y: bounds.h / 2 },
       radius: PLAYER_RADIUS,
       hp: maxHp,
       maxHp,
@@ -1201,7 +1218,7 @@ export function createGame(seed: number = DEFAULT_SEED, config?: RunConfig): Gam
     upgradeOptions: [],
     nextId: 1,
   };
-  if (config) initializeRebirth(state, config);
+  if (config) initializeRebirth(state, { ...config, expedition: bounds === ION_STATION });
   return state;
 }
 

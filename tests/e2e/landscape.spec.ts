@@ -13,7 +13,7 @@ async function startGame(page: Page) {
   await expect(page.getByTestId('arena')).toBeVisible();
 }
 
-test('mobile landscape keeps a tall 4:3 arena and compact touch HUD at target sizes', async ({ browser }) => {
+test('mobile landscape fills the viewport and keeps a compact touch HUD at target sizes', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 780, height: 360 }, isMobile: true, hasTouch: true });
   try {
     const page = await context.newPage();
@@ -31,7 +31,7 @@ test('mobile landscape keeps a tall 4:3 arena and compact touch HUD at target si
       });
       expect(dimensions.arenaHeight).toBeGreaterThanOrEqual(dimensions.viewportHeight * .75);
       expect(dimensions.canvasHeight).toBeGreaterThanOrEqual(dimensions.viewportHeight * .75);
-      expect(dimensions.canvasWidth / dimensions.canvasHeight).toBeCloseTo(4 / 3, 1);
+      expect(dimensions.canvasWidth).toBeGreaterThanOrEqual(dimensions.viewportWidth * .95);
       expect(dimensions.pageWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
       await expect(page.getByTestId('virtual-controls')).toBeVisible();
       await expect(page.locator('.virtual-joystick')).toBeVisible();

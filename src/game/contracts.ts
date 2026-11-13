@@ -29,6 +29,7 @@ export type EnemyVariant = EnemyKind | 'spore' | 'hound' | 'elite' | 'queen';
 export interface RunConfig {
   character: CharacterId;
   biome: BiomeId;
+  expedition?: boolean;
 }
 
 export interface RebirthRun extends RunConfig {

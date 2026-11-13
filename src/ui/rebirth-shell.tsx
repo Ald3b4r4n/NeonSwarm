@@ -74,7 +74,7 @@ export function LaunchScreen({
     <section className="rebirth-screen" aria-labelledby="rebirth-title">
       <div className="rebirth-masthead">
         <h1 onClick={onLogoTap} id="rebirth-title" className="rebirth-title">
-          NEON SWARM <span>REBIRTH</span>
+          NEON SWARM <span>EXPEDIÇÃO ÍON</span>
         </h1>
         <p className="rebirth-standfirst">
           Doze minutos para romper o enxame e derrubar a Rainha de Cromo.

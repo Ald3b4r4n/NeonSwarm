@@ -1,5 +1,5 @@
 import { BIOMES, CHARACTERS, ENEMIES, EXTRACTION_DEADLINE, RUN_SECONDS, bossPattern, encounterAt } from './rebirth-encounters.js';
-import { ION_STATION, STATION_OBSTACLES } from './ion-station.js';
+import { OPEN_WORLD, WORLD_ORIGIN } from './ion-station.js';
 import { WEAPONS, WEAPON_IDS, makeWeaponAttack, weaponEvolution } from './rebirth-weapons.js';
 /**
  * Motor puro do NEON SWARM.
@@ -869,7 +869,8 @@ function initializeRebirth(state: GameState, config: RunConfig): void {
 
 function separateObstacles(state: GameState, pos: Vec2, radius: number): void {
   if (!state.run) return;
-  const obstacles = state.run.expedition ? STATION_OBSTACLES : BIOMES[state.run.biome].obstacles;
+  if (state.run.expedition) return;
+  const obstacles = BIOMES[state.run.biome].obstacles;
   for (const obstacle of obstacles) {
     const dx = pos.x - obstacle.x;
     const dy = pos.y - obstacle.y;
@@ -1170,7 +1171,7 @@ export function createGame(seed: number = DEFAULT_SEED, config?: RunConfig): Gam
   const normalizedSeed = Number.isFinite(seed) ? Math.abs(Math.trunc(seed)) >>> 0 : DEFAULT_SEED;
   const rng = normalizedSeed === 0 ? 0x9e3779b9 : normalizedSeed;
   const maxHp = PLAYER_START_HP;
-  const bounds = config?.expedition && config.biome === 'station' ? ION_STATION : ARENA_BOUNDS;
+  const bounds = config?.expedition ? OPEN_WORLD : ARENA_BOUNDS;
 
   const state: GameState = {
     seed: normalizedSeed,
@@ -1179,7 +1180,7 @@ export function createGame(seed: number = DEFAULT_SEED, config?: RunConfig): Gam
     time: 0,
     bounds: { ...bounds },
     player: {
-      pos: { x: bounds === ION_STATION ? 1152 : bounds.w / 2, y: bounds.h / 2 },
+      pos: { x: bounds === OPEN_WORLD ? WORLD_ORIGIN : bounds.w / 2, y: bounds.h / 2 },
       radius: PLAYER_RADIUS,
       hp: maxHp,
       maxHp,
@@ -1218,7 +1219,7 @@ export function createGame(seed: number = DEFAULT_SEED, config?: RunConfig): Gam
     upgradeOptions: [],
     nextId: 1,
   };
-  if (config) initializeRebirth(state, { ...config, expedition: bounds === ION_STATION });
+  if (config) initializeRebirth(state, { ...config, expedition: bounds === OPEN_WORLD });
   return state;
 }
 

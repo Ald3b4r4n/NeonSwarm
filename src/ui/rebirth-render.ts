@@ -2,7 +2,7 @@ import { ARENA_WIDTH as W, ARENA_HEIGHT as H, type GameState, type Vec2, type We
 import { makeWeaponAttack } from '../game/rebirth-weapons.js';
 import { BIOMES, bossPattern } from '../game/rebirth-encounters.js';
 import type { ArenaArt } from './rebirth-art.js';
-import { drawStation, drawStationMap } from './ion-terrain.js';
+import { drawOpenWorld } from './ion-terrain.js';
 
 const weaponColors: Record<WeaponId, string> = {
   coil: '#75f6ff', scatter: '#ffd291', lance: '#a8f9ff',
@@ -77,7 +77,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
     pos.y >= view.y - pad && pos.y <= view.y + view.h + pad;
   if (run.expedition) {
     ctx.setTransform(scale, 0, 0, scale, -view.x * scale, -view.y * scale);
-    drawStation(ctx, view);
+    drawOpenWorld(ctx, run.biome, view);
   } else {
     ctx.setTransform(ctx.canvas.width / W, 0, 0, ctx.canvas.height / H, 0, 0);
     ctx.drawImage(art.terrain, 0, 0, W, H);
@@ -215,5 +215,5 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
     }
   }
   ctx.globalAlpha = 1;
-  if (run.expedition) drawStationMap(ctx, view, player.pos);
+
 }

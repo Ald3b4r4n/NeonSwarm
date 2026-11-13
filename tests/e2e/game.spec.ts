@@ -13,18 +13,16 @@ async function playerX(page: Page) {
   return Number(raw);
 }
 
-test('a câmera acompanha Vesper entre setores da Estação Íon', async ({ page }) => {
+test('a câmera acompanha Vesper pelo mundo além dos limites da estação anterior', async ({ page }) => {
   await page.clock.install();
   await page.goto('./');
   await page.getByRole('button', { name: /^jogar$/i }).click();
-  const sector = page.getByTestId('station-sector');
-  await expect(sector).toHaveText('Terminal Íon');
+  await expect(page.getByTestId('world-name')).toHaveText('Ermos de Íon');
   const initial = await playerX(page);
   await page.keyboard.down('ArrowRight');
-  await page.clock.runFor(2400);
+  await page.clock.runFor(12000);
   await page.keyboard.up('ArrowRight');
-  await expect(sector).toHaveText('Estação de trânsito');
-  expect(await playerX(page)).toBeGreaterThan(initial + 384);
+  expect(await playerX(page)).toBeGreaterThan(initial + 1920);
 });
 
 test('desktop abre a arena, move com teclado e pausa o relógio', async ({ page }) => {

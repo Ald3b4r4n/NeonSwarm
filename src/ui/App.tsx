@@ -4,7 +4,7 @@ import { QUALITY_PRESETS, readQuality, saveQuality, type FixedQuality, type Qual
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { createGame, stepGame, applyUpgrade } from '../game/engine.js';
 import { type GameState, type UpgradeId, type CharacterId, type BiomeId, type WeaponId } from '../game/contracts.js';
-import { stationSector } from '../game/ion-station.js';
+import { WORLD_NAMES } from '../game/ion-station.js';
 import { drawRebirth } from './rebirth-render.js';
 import { artUrl, loadArenaArt, type ArenaArt } from './rebirth-art.js';
 import { LaunchScreen } from './rebirth-shell.js';
@@ -18,8 +18,8 @@ const characters = [
   { id: 'rook', name: 'Rook', description: 'Engenheiro blindado. Começa com a Dispersora.', image: artUrl('rook') },
 ];
 const biomes = [
-  { id: 'station', name: 'Estação Íon', description: 'Doze setores conectados por trilhos e passagens de serviço.', image: artUrl('station') },
-  { id: 'nursery', name: 'Viveiro Rubro', description: 'Laboratório tomado por esporos e feras.', image: artUrl('nursery') },
+  { id: 'station', name: 'Ermos de Íon', description: 'Planície industrial aberta, com destroços espalhados.', image: artUrl('station') },
+  { id: 'nursery', name: 'Viveiro Rubro', description: 'Terreno orgânico aberto, tomado por esporos e feras.', image: artUrl('nursery') },
 ];
 
 export function App() {
@@ -75,7 +75,7 @@ export function App() {
     try {
       const chosen = options ? { ...selected.current } : { character, biome };
       art.current = await loadArenaArt(chosen.biome);
-      game.current = createGame(Date.now() >>> 0, { ...chosen, expedition: chosen.biome === 'station' });
+      game.current = createGame(Date.now() >>> 0, { ...chosen, expedition: true });
       if (options && "weapon" in chosen && chosen.weapon) {
         game.current = applyDeveloperAction(game.current, { type: 'weapon/set-rank', weapon: chosen.weapon, rank: 1 });
       }
@@ -378,7 +378,7 @@ export function App() {
     </section>}
     <div id="arena" ref={field} className={`arena ${active ? 'active' : ''}`} tabIndex={0} aria-label="Campo de jogo" data-player-x={p.pos.x} data-player-y={p.pos.y} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onLostPointerCapture={pointerEnd}>
       <canvas ref={canvas} aria-label="Arena" data-testid="arena" data-player-x={p.pos.x} data-player-y={p.pos.y} width={960} height={720}>Arena de NEON SWARM. Use WASD ou setas para mover e Espaço para pulso.</canvas>
-      {snapshot.run?.expedition && <div className="station-sector" data-testid="station-sector">{stationSector(p.pos.x, p.pos.y)}</div>}
+      {snapshot.run?.expedition && <div className="station-sector" data-testid="world-name">{WORLD_NAMES[snapshot.run.biome]}</div>}
       <div className="virtual-controls" data-testid="virtual-controls" aria-label="Controles por toque">
         <div className={`virtual-joystick ${active ? '' : 'disabled'}`} role="group" aria-label="Joystick virtual" onPointerDown={joystickDown} onPointerMove={joystickMove} onPointerUp={joystickEnd} onPointerCancel={joystickEnd} onLostPointerCapture={joystickEnd}>
           <span className="joystick-ring" />

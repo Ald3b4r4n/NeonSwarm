@@ -51,7 +51,7 @@
   .portrait-prompt button { margin-top: 4px; padding: 10px 16px; }
 }
 
-@media (orientation: landscape) and (pointer: coarse) and (max-height: 600px) {
+@media (orientation: landscape) {
   .match {
     position: fixed;
     z-index: 2;
@@ -182,7 +182,7 @@
 }
 .match.expedition .arena canvas {
   width: 100%;
-  height: min(70dvh, 720px);
+  height: 100dvh;
   aspect-ratio: auto;
 }
 .station-sector {
@@ -199,4 +199,37 @@
 @media (orientation: landscape) and (pointer: coarse) {
   .match.expedition .arena canvas { height: 100dvh; }
   .station-sector { top: max(64px, calc(env(safe-area-inset-top) + 54px)); }
+}
+
+@media (orientation: landscape) and (pointer: fine) {
+  .match .dashboard { min-height: 46px; }
+  .match .metric strong { font-size: 16px; }
+  .match .arsenal { top: max(57px, calc(env(safe-area-inset-top) + 52px)); }
+  .match .station-sector { top: max(79px, calc(env(safe-area-inset-top) + 74px)); }
+  .match .toolbar { background: none; pointer-events: none; }
+  .match .toolbar .actions { display: flex; pointer-events: auto; }
+  .match .preferences { display: flex; position: absolute; right: 16px; bottom: 55px; z-index: 3; }
+  .match .preferences > span { display: none; }
+}
+@media (orientation: portrait) {
+  .match.expedition { position: fixed; inset: 0; overflow: hidden; z-index: 2; }
+  .match.expedition .arena { position: absolute; inset: 0; border: 0; }
+  .match.expedition .masthead, .match.expedition .dashboard,
+  .match.expedition .arsenal, .match.expedition .toolbar { position: absolute; left: 8px; right: 8px; z-index: 3; }
+  .match.expedition .masthead { top: max(6px, env(safe-area-inset-top)); margin: 0; }
+  .match.expedition .dashboard { top: max(35px, calc(env(safe-area-inset-top) + 29px)); padding: 6px; gap: 5px; grid-template-columns: 1.6fr repeat(5, 1fr); }
+  .match.expedition .vitals { grid-column: auto; }
+  .match.expedition .vitals span, .match.expedition .metric > span { font-size: 7px; letter-spacing: 0; }
+  .match.expedition .metric { padding-left: 3px; gap: 2px; }
+  .match.expedition .metric strong { font-size: 12px; }
+  .match.expedition .arsenal { top: max(92px, calc(env(safe-area-inset-top) + 86px)); padding: 0; border: 0; background: none; }
+  .match.expedition .station-sector { top: max(126px, calc(env(safe-area-inset-top) + 120px)); }
+  .match.expedition .toolbar { bottom: max(4px, env(safe-area-inset-bottom)); padding: 4px; pointer-events: none; }
+  .match.expedition .toolbar .actions { pointer-events: auto; }
+  .match.expedition .preferences { display: none; }
+  .match.expedition .overlay, .match.expedition .portrait-prompt { z-index: 10; }
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  .match.expedition .toolbar .actions { display: none; }
+  .match.expedition .virtual-joystick, .match.expedition .touch-actions { margin-bottom: 20px; }
 }

@@ -3,6 +3,7 @@ import { makeWeaponAttack } from '../game/rebirth-weapons.js';
 import { BIOMES, bossPattern } from '../game/rebirth-encounters.js';
 import type { ArenaArt } from './rebirth-art.js';
 import { drawOpenWorld } from './ion-terrain.js';
+import { drawSurvivor } from './survivor-art.js';
 
 const weaponColors: Record<WeaponId, string> = {
   coil: '#75f6ff', scatter: '#ffd291', lance: '#a8f9ff',
@@ -65,7 +66,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   if (!run) return;
   const time = reduced ? 0 : state.time;
   const bounds = state.bounds;
-  const scale = Math.max(ctx.canvas.height / 490, ctx.canvas.width / 1060);
+  const scale = Math.max(ctx.canvas.height / 560, ctx.canvas.width / 1440);
   const w = ctx.canvas.width / scale;
   const h = ctx.canvas.height / scale;
   const view = {
@@ -151,14 +152,19 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
       }
     }
   }
-  halo(ctx, player.pos, player.radius + 8, '#71f8ff80', 2);
   const casting = state.impacts.some(effect => effect.kind === 'pulse' && effect.ttl > .2);
+  if (!run.expedition || casting) halo(ctx, player.pos, player.radius + 8, '#71f8ff80', 2);
   const attacking = state.projectiles.some(shot => shot.owner === 'player' &&
     Math.abs(shot.pos.x - player.pos.x) + Math.abs(shot.pos.y - player.pos.y) < 38);
   const motion = Math.hypot(run.move.x, run.move.y);
   const playerRow = state.phase === 'gameover' ? 4 : player.invuln > .62 && player.invuln < 2 ? 3 : casting ? 5 : attacking ? 2 : motion > 8 ? 1 : 0;
-  sprite(ctx, art.animation[run.character], player.pos, 96, state.time, motion > 8 ? run.move : { x: player.aim.x * 40, y: 0 },
-    playerRow, playerRow === 4 ? deathProgress : undefined);
+  if (run.expedition) {
+    drawSurvivor(ctx, run.character, player.pos, player.aim, time, motion > 8, attacking,
+      playerRow === 3, playerRow === 4 ? deathProgress : 0);
+  } else {
+    sprite(ctx, art.animation[run.character], player.pos, 96, state.time, motion > 8 ? run.move : { x: player.aim.x * 40, y: 0 },
+      playerRow, playerRow === 4 ? deathProgress : undefined);
+  }
   for (const bolt of state.projectiles) {
     if (run.expedition && !visible(bolt.pos)) continue;
     const color = bolt.owner === 'enemy' ? '#ff82a6' : weaponColors[bolt.weapon ?? 'coil'];

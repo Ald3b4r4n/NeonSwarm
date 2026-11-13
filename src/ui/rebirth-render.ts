@@ -18,6 +18,29 @@ function halo(ctx: CanvasRenderingContext2D, pos: Vec2, radius: number, color: s
   ctx.stroke();
 }
 
+function explosion(ctx: CanvasRenderingContext2D, pos: Vec2, size: number, age: number, id: number, electric: boolean) {
+  const heat = electric ? '#8ceaff' : '#ff9b53';
+  const radius = size * (.15 + age * .72);
+  const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius);
+  glow.addColorStop(0, '#fff4c9');
+  glow.addColorStop(.28, heat + 'a0');
+  glow.addColorStop(1, heat + '00');
+  ctx.fillStyle = glow;
+  ctx.fillRect(pos.x - radius, pos.y - radius, radius * 2, radius * 2);
+  halo(ctx, pos, size * (.23 + age * .77), heat, 2.8 * (1 - age) + 1);
+  ctx.strokeStyle = heat;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 16; i++) {
+    const angle = i * 2.39996 + id;
+    const travel = radius * (.46 + (i % 5) * .13);
+    const x = Math.cos(angle), y = Math.sin(angle);
+    ctx.moveTo(pos.x + x * travel, pos.y + y * travel);
+    ctx.lineTo(pos.x + x * (travel + 7), pos.y + y * (travel + 7));
+  }
+  ctx.stroke();
+}
+
 function sprite(ctx: CanvasRenderingContext2D, atlas: HTMLImageElement, pos: Vec2, size: number,
   time: number, velocity: Vec2, row: number, progress?: number) {
   const cell = 96;
@@ -159,7 +182,7 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
   const motion = Math.hypot(run.move.x, run.move.y);
   const playerRow = state.phase === 'gameover' ? 4 : player.invuln > .62 && player.invuln < 2 ? 3 : casting ? 5 : attacking ? 2 : motion > 8 ? 1 : 0;
   if (run.expedition) {
-    drawSurvivor(ctx, run.character, player.pos, player.aim, time, motion > 8, attacking,
+    drawSurvivor(ctx, art.survivors[run.character], player.pos, player.aim, time, motion > 8, attacking,
       playerRow === 3, playerRow === 4 ? deathProgress : 0);
   } else {
     sprite(ctx, art.animation[run.character], player.pos, 96, state.time, motion > 8 ? run.move : { x: player.aim.x * 40, y: 0 },
@@ -176,6 +199,12 @@ export function drawRebirth(ctx: CanvasRenderingContext2D, state: GameState, art
     if (reduced && impact.kind !== 'kill' && impact.kind !== 'blast' && impact.kind !== 'pulse' && impact.kind !== 'arc') continue;
     ctx.globalAlpha = Math.max(0, 1 - progress);
     const rank = impact.rank ?? 1;
+    if (!reduced && (impact.kind === 'kill' || impact.kind === 'blast' || impact.kind === 'pulse')) {
+      const size = impact.radius ?? (impact.variant === 'queen' ? 126 : impact.kind === 'kill' ? 45 : 95);
+      if (!run.expedition || visible(impact.pos, size)) {
+        explosion(ctx, impact.pos, size, progress, impact.id, impact.kind === 'pulse');
+      }
+    }
     if (impact.kind === 'kill' && impact.variant) {
       sprite(ctx, art.animation[impact.variant], impact.pos, impact.variant === 'queen' ? 170 : 59,
         time, { x: 0, y: 0 }, 4, progress);

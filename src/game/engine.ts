@@ -102,6 +102,9 @@ const UPGRADE_CATALOG: Record<CoreUpgrade, { title: string; description: string 
   magnet: { title: 'Ímã +40', description: 'Atrai orbes de XP de mais longe.' },
   pierce: { title: 'Perfuração +1', description: 'Projéteis atravessam mais um inimigo.' },
   regen: { title: 'Regeneração +0,6/s', description: 'Recupera vida continuamente.' },
+  armor: { title: 'Placas reativas', description: 'Reduz em 12% o dano recebido por nível, até 36%.' },
+  capacitor: { title: 'Capacitor de campo', description: 'Reduz em 4 a energia gasta por pulso, até 12.' },
+  overcharge: { title: 'Pulso de ruptura', description: 'Amplia o pulso em 24 unidades e acrescenta 12 de dano por nível.' },
 };
 
 const UPGRADE_IDS: CoreUpgrade[] = [
@@ -389,6 +392,7 @@ function hurtPlayer(state: GameState, amount: number): void {
   const player = state.player;
   if (player.invuln > 0 || player.hp <= 0) return;
 
+  amount *= 1 - .12 * (player.upgrades.armor ?? 0);
   const dealt = Math.min(Math.max(0, amount), player.hp);
   player.hp = Math.max(0, player.hp - amount);
   player.invuln = PLAYER_INVULN_SECONDS;
@@ -433,6 +437,13 @@ function buildUpgradeOptions(state: GameState): UpgradeOption[] {
   const pool: UpgradeOption[] = UPGRADE_IDS.filter(id => upgradeCanImprove(state, id))
     .map(id => ({ id, ...UPGRADE_CATALOG[id], nextLevel: (state.player.upgrades[id] ?? 0) + 1 }));
   if (state.run) {
+    if (state.run.expedition) {
+      const powers = ['armor', 'capacitor', 'overcharge'] as const;
+      for (const id of powers) {
+        const rank = state.player.upgrades[id] ?? 0;
+        if (rank < 3) pool.push({ id, ...UPGRADE_CATALOG[id], nextLevel: rank + 1 });
+      }
+    }
     const ranks = state.run.ranks;
     for (const id of WEAPON_IDS) {
       const rank = ranks[id] ?? 0;
@@ -451,7 +462,12 @@ function buildUpgradeOptions(state: GameState): UpgradeOption[] {
     const j = Math.floor(random(state) * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  return pool.slice(0, MAX_UPGRADE_OPTIONS);
+  const options = pool.slice(0, MAX_UPGRADE_OPTIONS);
+  if (state.run?.expedition && !options.some(option => option.id.startsWith('weapon-'))) {
+    const weapon = pool.find(option => option.id.startsWith('weapon-'));
+    if (weapon) options[options.length - 1] = weapon;
+  }
+  return options;
 }
 
 function maybeLevelUp(state: GameState): void {
@@ -596,12 +612,14 @@ function updatePlayer(state: GameState, move: Vec2, pulse: boolean, dt: number):
     player.energy = Math.min(player.maxEnergy, player.energy + dt * 2);
     separateObstacles(state, player.pos, player.radius);
   }
-  if (pulse && player.energy >= PULSE_COST) {
-    player.energy -= PULSE_COST;
+  const pulseCost = PULSE_COST - 4 * (player.upgrades.capacitor ?? 0);
+  if (pulse && player.energy >= pulseCost) {
+    player.energy -= pulseCost;
     const pulseRank = state.run ? Math.min(5, 1 + Math.floor((player.level - 1) / 5)) : 1;
-    const pulseRadius = PULSE_RADIUS + (pulseRank - 1) * 5;
+    const overcharge = player.upgrades.overcharge ?? 0;
+    const pulseRadius = PULSE_RADIUS + (pulseRank - 1) * 5 + overcharge * 24;
     const pulseDamage =
-      PULSE_BASE_DAMAGE + player.level * 2 + player.stats.damage * 0.35 + (pulseRank - 1) * 3;
+      PULSE_BASE_DAMAGE + player.level * 2 + player.stats.damage * 0.35 + (pulseRank - 1) * 3 + overcharge * 12;
 
     for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
       const enemy = state.enemies[i] as Enemy;
@@ -859,6 +877,11 @@ function initializeRebirth(state: GameState, config: RunConfig): void {
   state.player.stats.moveSpeed = character.moveSpeed;
   state.player.stats.magnetRadius = 220;
   state.player.stats.regenPerSec = .22;
+  if (config.expedition) {
+    state.player.maxHp += 24;
+    state.player.hp = state.player.maxHp;
+    state.player.stats.regenPerSec = .7;
+  }
   state.player.xpToNext = 22;
   state.wave.toSpawn = 0;
   state.run = {
@@ -942,11 +965,12 @@ function updateEncounter(state: GameState, dt: number): void {
     : encounter.kind === 'spore' && state.time < 145 && run.spawnIndex % (state.time < 90 ? 6 : 4) !== 0 ? 'drone'
     : encounter.kind === 'shooter' && state.time < 300 && run.spawnIndex % 4 !== 0 ? 'drone' : encounter.kind;
   spawnRebirthEnemy(state, variant, encounter.scale);
-  if (state.time > (run.expedition ? 30 : 275) && !run.bossSpawned) {
+  if (state.time > (run.expedition ? 80 : 275) && !run.bossSpawned) {
     spawnRebirthEnemy(state, run.spawnIndex % 3 ? 'drone' : 'hound', encounter.scale);
-    if (state.time > (run.expedition ? 135 : 505)) spawnRebirthEnemy(state, 'hound', encounter.scale);
+    if (state.time > (run.expedition ? 220 : 505)) spawnRebirthEnemy(state, 'hound', encounter.scale);
   }
-  state.wave.spawnTimer = encounter.cadence * (run.expedition || state.time < 110 ? .72 : 1) * (run.bossSpawned ? 1.8 : 1);
+  const cadence = run.expedition ? (state.time < 50 ? 1.05 : .8) : state.time < 110 ? .72 : 1;
+  state.wave.spawnTimer = encounter.cadence * cadence * (run.bossSpawned ? 1.8 : 1);
 }
 
 function finishBossEncounter(state: GameState): boolean {

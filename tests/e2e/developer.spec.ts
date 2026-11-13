@@ -19,7 +19,10 @@ test('painel bloqueia senha inválida e isola a partida de teste dos recordes', 
   await panel.getByRole('combobox', { name: /avançar para uma onda/i }).selectOption('8');
   await panel.getByRole('group', { name: /rank de/i }).getByRole('button', { name: '5' }).click();
   await expect(panel.getByRole('group', { name: /rank de/i }).getByRole('button', { name: '5' })).toHaveAttribute('aria-pressed', 'true');
-  for (let i = 0; i < 11; i++) await panel.getByRole('button', { name: '−10' }).click();
+  const health = Number((await page.getByTestId('health').innerText()).split('/')[0]);
+  for (let i = 0; i < Math.ceil(health / 10); i++) {
+    await panel.getByRole('button', { name: '−10' }).click();
+  }
   await panel.getByRole('button', { name: 'Fechar painel' }).first().click();
   await expect(page.getByText('MODO TESTE', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Retomar', exact: true }).first().click();

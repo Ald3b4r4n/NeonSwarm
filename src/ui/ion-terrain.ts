@@ -61,6 +61,44 @@ function terrainTile(biome: BiomeId, col: number, row: number) {
     ctx.stroke();
   }
 
+  for (let i = 0; i < 7; i++) {
+    const x = 24 + random() * (size - 48);
+    const y = 24 + random() * (size - 48);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(random() * Math.PI);
+    const scale = .7 + random() * .6;
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#0a111870';
+    ctx.fillRect(-14, -6, 34, 19);
+    if (biome === 'station' && i % 3 === 0) {
+      ctx.fillStyle = '#52636a';
+      ctx.fillRect(-16, -11, 32, 19);
+      ctx.fillStyle = '#262d35';
+      ctx.fillRect(-13, -8, 26, 13);
+      ctx.fillStyle = '#c28955';
+      for (let stripe = -10; stripe < 12; stripe += 7) ctx.fillRect(stripe, -6, 3, 9);
+    } else if (i % 3 === 1) {
+      ctx.strokeStyle = color.metal;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-15, 9);
+      ctx.bezierCurveTo(16, 16, -16, -16, 16, -10);
+      ctx.stroke();
+      ctx.fillStyle = color.light + 'a0';
+      ctx.fillRect(13, -13, 4, 6);
+    } else {
+      ctx.fillStyle = color.metal;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 15, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = color.light + '88';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   if (random() < .7) {
     const x = 65 + random() * 380;
     const y = 65 + random() * 380;

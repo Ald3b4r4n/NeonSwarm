@@ -44,7 +44,8 @@ export interface RebirthRun extends RunConfig {
 }
 export type UpgradeId =
   | `weapon-${WeaponId}`
-  | 'damage' | 'fireRate' | 'speed' | 'maxHp' | 'multishot' | 'magnet' | 'pierce' | 'regen';
+  | 'damage' | 'fireRate' | 'speed' | 'maxHp' | 'multishot' | 'magnet' | 'pierce' | 'regen'
+  | 'armor' | 'capacitor' | 'overcharge';
 
 export interface PlayerStats {
   moveSpeed: number;      // unid/s

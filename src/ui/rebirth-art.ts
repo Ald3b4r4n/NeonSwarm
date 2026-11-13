@@ -7,6 +7,7 @@ const spriteNames: readonly (CharacterId | EnemyVariant)[] = [
 ];
 export type SpriteId = typeof spriteNames[number];
 export interface ArenaArt {
+  survivors: Readonly<Record<CharacterId, HTMLImageElement>>;
   terrain: HTMLImageElement;
   animation: Readonly<Record<SpriteId, HTMLImageElement>>;
   decoration: HTMLImageElement;
@@ -28,10 +29,12 @@ function load(name: string): Promise<HTMLImageElement> {
 }
 
 export async function loadArenaArt(biome: BiomeId): Promise<ArenaArt> {
-  const [terrain, decoration, animation] = await Promise.all([
+  const [terrain, decoration, animation, vesper, rook] = await Promise.all([
     load(biome),
     load('animated/' + biome + '-prop'),
     Promise.all(spriteNames.map(async name => [name, await load('animated/' + name)] as const)),
+    load('vesper'),
+    load('rook'),
   ]);
-  return { terrain, decoration, animation: Object.fromEntries(animation) as ArenaArt['animation'] };
+  return { terrain, decoration, animation: Object.fromEntries(animation) as ArenaArt['animation'], survivors: { vesper, rook } };
 }

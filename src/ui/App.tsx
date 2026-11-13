@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { createGame, stepGame, applyUpgrade } from '../game/engine.js';
 import { type GameState, type UpgradeId, type CharacterId, type BiomeId, type WeaponId } from '../game/contracts.js';
 import { WORLD_NAMES } from '../game/ion-station.js';
+import { CombatAudio } from './combat-audio.js';
 import { drawRebirth } from './rebirth-render.js';
 import { artUrl, loadArenaArt, type ArenaArt } from './rebirth-art.js';
 import { LaunchScreen } from './rebirth-shell.js';
@@ -48,6 +49,8 @@ export function App() {
   const [record, setRecord] = useState(readRecord);
   const [reduced, setReduced] = useState(readMotion);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const audio = useRef<CombatAudio | null>(null);
+  const [muted, setMuted] = useState(false);
   const field = useRef<HTMLDivElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
   const keys = useRef(new Set<string>());
@@ -66,9 +69,18 @@ export function App() {
     setJoystickOffset({ x: 0, y: 0 });
   };
   const publish = () => setSnapshot(game.current);
+  function toggleSound() {
+    if (muted) void audio.current?.enable();
+    else audio.current?.disable();
+    setMuted(!muted);
+    field.current?.focus();
+  }
   function choose(id: UpgradeId) { game.current = applyUpgrade(game.current, id); clearInput(); publish(); field.current?.focus(); }
   async function begin(options?: { test: true; action?: DeveloperStateAction; frozen?: boolean }) {
     if (loadingRef.current) return;
+    audio.current ??= new CombatAudio();
+    audio.current.reset();
+    if (!muted) void audio.current.enable();
     loadingRef.current = true;
     setLoading(true);
     setLoadError(false);
@@ -249,6 +261,7 @@ export function App() {
       } else accumulator = 0;
       if (before !== game.current.phase || now - lastHud >= 100) { setSnapshot(game.current); lastHud = now; }
       if (game.current.phase === 'gameover') deathAt ||= now; else deathAt = 0;
+      if (current.started && !current.paused) audio.current?.update(game.current);
       if (ctx && art.current && current.started && (!developer.current.limit || now - lastDraw >= 1000 / developer.current.limit - 1)) {
         drawRebirth(ctx, game.current, art.current, current.reduced || !QUALITY_PRESETS[applied ?? 'medium'].effects, deathAt ? Math.min(1, (now - deathAt) / 540) : 0);
         lastDraw = now;
@@ -256,7 +269,7 @@ export function App() {
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); audio.current?.dispose(); };
   }, []);
 
   useEffect(() => {
@@ -396,13 +409,13 @@ export function App() {
         <button type="button" onClick={() => setPortraitDismissed(true)}>Seguir no retrato</button>
       </aside>}
       {(paused || snapshot.phase !== 'playing') && <div className="overlay" onPointerDown={event => event.stopPropagation()}><section className="dialog" role="dialog" aria-modal="true" aria-label={paused ? 'Jogo pausado' : snapshot.phase === 'upgrade' ? 'Escolha uma melhoria' : 'Fim de partida'}>
-        {paused ? <><p className="eyebrow">SISTEMA EM ESPERA</p><h2>Pausado</h2><p>Respire. A arena espera por você.</p>{qualitySelect}<button ref={primary} className="primary" onClick={resume}>Retomar</button></> : snapshot.phase === 'upgrade' ? <><p className="eyebrow">NÍVEL {p.level}</p><h2>Escolha sua evolução</h2><p>Selecione uma melhoria para continuar.</p><div className="upgrades">{snapshot.upgradeOptions.map((option, index) => <button ref={index === 0 ? primary : undefined} key={option.id} onClick={() => choose(option.id)}><span className="eyebrow">{index + 1} · NÍVEL {option.nextLevel}</span><strong>{option.title}</strong><span>{option.description}</span>{WEAPON_IDS.filter(id => option.id === `weapon-${id}`).map(id => {
+        {paused ? <><p className="eyebrow">SISTEMA EM ESPERA</p><h2>Pausado</h2><p>Respire. A arena espera por você.</p>{qualitySelect}<button type="button" aria-pressed={muted} onClick={toggleSound}>{muted ? "Ativar som" : "Silenciar"}</button><button ref={primary} className="primary" onClick={resume}>Retomar</button></> : snapshot.phase === 'upgrade' ? <><p className="eyebrow">NÍVEL {p.level}</p><h2>Escolha sua evolução</h2><p>Selecione uma melhoria para continuar.</p><div className="upgrades">{snapshot.upgradeOptions.map((option, index) => <button ref={index === 0 ? primary : undefined} key={option.id} onClick={() => choose(option.id)}><span className="eyebrow">{index + 1} · NÍVEL {option.nextLevel}</span><strong>{option.title}</strong><span>{option.description}</span>{WEAPON_IDS.filter(id => option.id === `weapon-${id}`).map(id => {
           const stats = WEAPONS[id].stats(option.nextLevel);
           return <small key={id} className="upgrade-preview">{stats.damage} de dano · {stats.cooldown.toFixed(2).replace('.', ',')} s</small>;
         })}</button>)}</div></> : <><p className="eyebrow">SINAL ENCERRADO</p><h2>{snapshot.phase === 'victory' ? 'Setor recuperado' : 'Fim de jogo'}</h2><p>{snapshot.phase === "gameover" && snapshot.time >= EXTRACTION_DEADLINE ? "A janela de extração se fechou antes da derrota da Rainha." : null}</p><p className="score">{snapshot.score.toLocaleString('pt-BR')} <span>pontos</span></p><p>Onda {snapshot.wave.number} · {clock(snapshot.stats.timeAlive)} · {snapshot.stats.kills} abates</p><p>Recorde: {record.highScore.toLocaleString('pt-BR')} · Melhor onda: {record.bestWave}</p><button ref={primary} className="primary" onClick={() => { void begin(); }}>Jogar novamente</button><button className="secondary" onClick={() => { setStarted(false); setPaused(false); }}>Voltar à seleção</button></>}
       </section></div>}
     </div>
-    <footer className="toolbar"><div><span className="status-dot" />{paused ? 'PAUSADO' : snapshot.phase === 'upgrade' ? 'EVOLUÇÃO DISPONÍVEL' : snapshot.phase === 'gameover' ? 'PARTIDA ENCERRADA' : `PONTOS ${snapshot.score.toLocaleString('pt-BR')}`}</div><div className="actions"><button disabled={!active} onClick={() => { pulse.current = true; field.current?.focus(); }}>Pulso <kbd>Espaço</kbd></button><button aria-label={paused ? 'Retomar' : 'Pausar'} disabled={!started || snapshot.phase !== 'playing'} onClick={() => { clearInput(); if (paused) resume(); else setPaused(true); }}>{paused ? 'Retomar' : 'Pausar'} <kbd>P</kbd></button></div></footer>
+    <footer className="toolbar"><div><span className="status-dot" />{paused ? 'PAUSADO' : snapshot.phase === 'upgrade' ? 'EVOLUÇÃO DISPONÍVEL' : snapshot.phase === 'gameover' ? 'PARTIDA ENCERRADA' : `PONTOS ${snapshot.score.toLocaleString('pt-BR')}`}</div><div className="actions"><button type="button" aria-pressed={muted} onClick={toggleSound}>{muted ? "Ativar som" : "Silenciar"}</button><button disabled={!active} onClick={() => { pulse.current = true; field.current?.focus(); }}>Pulso <kbd>Espaço</kbd></button><button aria-label={paused ? 'Retomar' : 'Pausar'} disabled={!started || snapshot.phase !== 'playing'} onClick={() => { clearInput(); if (paused) resume(); else setPaused(true); }}>{paused ? 'Retomar' : 'Pausar'} <kbd>P</kbd></button></div></footer>
     <div className="preferences"><span>WASD / setas · arraste para mover · 1–3 para evoluir</span><label><input type="checkbox" checked={reduced} onChange={event => { setReduced(event.target.checked); saveMotion(event.target.checked); }} /> Reduzir efeitos</label></div>
     </div>
     {fpsShown && <output className="performance-display" aria-label="Desempenho">{fps} FPS</output>}
